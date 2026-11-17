@@ -28,11 +28,13 @@ var hand: Array = []           # Dictionary {cells, color} یا null
 var selected := -1
 var score := 0
 var game_over := false
+var account_balance := -1
 
 
 func _ready() -> void:
 	randomize()
 	new_game()
+	_handle_launch_uri()
 
 
 func new_game() -> void:
@@ -72,6 +74,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_tap(p: Vector2) -> void:
 	if game_over:
 		new_game()
+		return
+
+	if p.y < 240 and Api.token == "":
+		OS.shell_open(Api.BASE + "launch")
 		return
 
 	for i in hand.size():
@@ -154,6 +160,8 @@ func _draw() -> void:
 	draw_string(f, Vector2(0, 130), "Cheeno", HORIZONTAL_ALIGNMENT_CENTER, 720, 56, Color.WHITE)
 	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, Save.get_coins(), Save.best_score]
 	draw_string(f, Vector2(0, 200), info, HORIZONTAL_ALIGNMENT_CENTER, 720, 30, Color("#d9d0ff"))
+	var acc := "برای ورود به حساب، اینجا لمس کن" if Api.token == "" else "سکه‌ی حساب: %d" % account_balance
+	draw_string(f, Vector2(0, 240), acc, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 
 	draw_rect(Rect2(board_origin - Vector2(8, 8), Vector2(N * CELL + 16, N * CELL + 16)), Color("#1a1036"))
 	for r in N:
@@ -179,3 +187,14 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color(0, 0, 0, 0.7))
 		draw_string(f, Vector2(0, 600), "بازی تمام شد", HORIZONTAL_ALIGNMENT_CENTER, 720, 52, Color.WHITE)
 		draw_string(f, Vector2(0, 660), "برای شروع دوباره لمس کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color("#d9d0ff"))
+
+
+func _handle_launch_uri() -> void:
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("cheeno://auth"):
+			var code := arg.get_slice("code=", 1).get_slice("&", 0).uri_decode()
+			var r: Dictionary = await Api.login(code)
+			if r.ok:
+				account_balance = int(r.data.get("balance", 0))
+				queue_redraw()
+			return
