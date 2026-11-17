@@ -11,29 +11,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Find SDK paths
+      - name: Locate SDKs and export templates
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/android-sdk}}" >> $GITHUB_ENV
-          echo "JAVA_HOME_DIR=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
-          echo "ANDROID_HOME=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/android-sdk}}"
-          ls "${ANDROID_HOME:-/opt/android-sdk}" || true
-          ls "${ANDROID_HOME:-/opt/android-sdk}/build-tools" || true
+          JAVA_DIR=$(dirname $(dirname $(readlink -f $(which javac))))
+          SDK_DIR=$(dirname $(dirname $(readlink -f $(which adb 2>/dev/null || which sdkmanager 2>/dev/null || echo /opt/android-sdk/platform-tools/adb))))
+          echo "JAVA_DIR=$JAVA_DIR" >> $GITHUB_ENV
+          echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+          TPL_DIR=$(dirname "$(find / -name android_debug.apk -not -path '*/proc/*' 2>/dev/null | head -1)")
+          echo "TPL_DIR=$TPL_DIR"
+          ls -la "$TPL_DIR" || true
+          mkdir -p $HOME/.local/share/godot/export_templates
+          ln -sfn "$TPL_DIR" $HOME/.local/share/godot/export_templates/4.2.2.stable
+          echo "HOME=$HOME"
+          echo "JAVA_DIR=$JAVA_DIR  SDK_DIR=$SDK_DIR"
 
       - name: Write Godot editor settings
         run: |
-          mkdir -p ~/.config/godot
-          [ -f /root/debug.keystore ] || keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
-          cat > ~/.config/godot/editor_settings-4.2.tres <<EOT
-          [gd_resource type="EditorSettings" format=3]
-
-          [resource]
-          export/android/android_sdk_path = "$ANDROID_HOME"
-          export/android/java_sdk_path = "$JAVA_HOME_DIR"
-          export/android/debug_keystore = "/root/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOT
-          cat ~/.config/godot/editor_settings-4.2.tres
+          mkdir -p $HOME/.config/godot
+          if [ ! -f /root/debug.keystore ]; then
+            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          fi
+          printf '%s\n' '[gd_resource type="EditorSettings" format=3]' '' '[resource]' \
+            "export/android/java_sdk_path = \"$JAVA_DIR\"" \
+            "export/android/android_sdk_path = \"$SDK_DIR\"" \
+            'export/android/debug_keystore = "/root/debug.keystore"' \
+            'export/android/debug_keystore_user = "androiddebugkey"' \
+            'export/android/debug_keystore_pass = "android"' \
+            > $HOME/.config/godot/editor_settings-4.2.tres
+          cat $HOME/.config/godot/editor_settings-4.2.tres
 
       - name: Export APK
         working-directory: game
