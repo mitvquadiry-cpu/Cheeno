@@ -1,0 +1,26 @@
+# Godot
+game/.godot/
+game/.import/
+game/export_presets.cfg.local
+*.translation
+
+# Android build
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Secrets
+.env
+*.secret
+
+# Third-party (not ours)
+digits.zip
+digits/
+.agent/
