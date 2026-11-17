@@ -22,7 +22,7 @@ jobs:
       - name: Write Godot editor settings
         run: |
           mkdir -p ~/.config/godot
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          [ -f /root/debug.keystore ] || keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
           cat > ~/.config/godot/editor_settings-4.2.tres <<EOT
           [gd_resource type="EditorSettings" format=3]
 
