@@ -37,8 +37,9 @@ jobs:
             'export/android/debug_keystore = "/root/debug.keystore"' \
             'export/android/debug_keystore_user = "androiddebugkey"' \
             'export/android/debug_keystore_pass = "android"' \
-            > $HOME/.config/godot/editor_settings-4.2.tres
-          cat $HOME/.config/godot/editor_settings-4.2.tres
+            > $HOME/.config/godot/editor_settings-4.tres
+          cp $HOME/.config/godot/editor_settings-4.tres $HOME/.config/godot/editor_settings-4.2.tres
+          cat $HOME/.config/godot/editor_settings-4.tres
 
       - name: Export APK
         working-directory: game
