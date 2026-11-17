@@ -167,7 +167,7 @@ func _draw() -> void:
 	for r in N:
 		for c in N:
 			var v: int = board[r * N + c]
-			var col := Color("#241a40") if v == 0 else COLORS[v - 1]
+			var col: Color = Color("#241a40") if v == 0 else COLORS[v - 1]
 			draw_rect(Rect2(cell_pos(c, r) + Vector2(3, 3), Vector2(CELL - 6, CELL - 6)), col)
 
 	for i in hand.size():
