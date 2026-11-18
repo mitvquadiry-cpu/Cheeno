@@ -33,6 +33,16 @@ jobs:
             > $HOME/.config/godot/editor_settings-4.tres
           cat $HOME/.config/godot/editor_settings-4.tres
 
+      - name: Diagnose
+        run: |
+          echo ENV; env | grep -i -E 'android|java|sdk'
+          echo ADB; find / -name adb -type f 2>&1 | grep -v '^find' | head
+          echo SDKMGR; find / -name sdkmanager -type f 2>&1 | grep -v '^find' | head
+          echo BUILDTOOLS; find / -type d -name build-tools 2>&1 | grep -v '^find' | head
+          echo PLATFORMS; find / -type d -name 'android-*' -path '*platforms*' 2>&1 | grep -v '^find' | head
+          echo TPL; ls -la $HOME/.local/share/godot/export_templates/4.2.2.stable | head -20
+          echo SETTINGS; ls -la $HOME/.config/godot
+
       - name: Export APK
         working-directory: game
         run: |
