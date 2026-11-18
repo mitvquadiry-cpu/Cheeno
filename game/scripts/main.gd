@@ -379,7 +379,14 @@ func _top_action(i: int) -> void:
 
 func _press_panel(p: Vector2) -> void:
 	_play("click")
+	if panel == "login" and not close_rect().has_point(p) and panel_rect().has_point(p):
+		_login_pad(p)
+		if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
+			_login_step()
+		return
 	if close_rect().has_point(p) or not panel_rect().has_point(p):
+		if panel == "login" and not close_rect().has_point(p):
+			return
 		panel = ""
 		_close_login_edit()
 		Save.save()
@@ -414,7 +421,7 @@ func _press_panel(p: Vector2) -> void:
 					account_balance = 0
 		"login":
 			_login_pad(p)
-			if Rect2(Vector2(110, 470), Vector2(500, 70)).has_point(p):
+			if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
 				_login_step()
 
 
@@ -450,7 +457,7 @@ func _login_pad(p: Vector2) -> void:
 
 
 func _pad_rect(i: int) -> Rect2:
-	return Rect2(110 + (i % 3) * 170, 590 + (i / 3) * 74, 160, 66)
+	return Rect2(110 + (i % 3) * 170, 630 + (i / 3) * 66, 160, 56)
 
 
 func _login_step() -> void:
@@ -1001,14 +1008,14 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			draw_string(f, Vector2(0, 610), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color.WHITE)
 			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
 		"login":
-			draw_string(f, Vector2(0, 300), "شمارهٔ موبایل (مثل 09123456789)" if not login_sent else "کد پیامک‌شده را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
-			var fr := Rect2(110, 330, 500, 80)
+			draw_string(f, Vector2(0, 372), "شمارهٔ موبایل (مثل 09123456789)" if not login_sent else "کد پیامک‌شده را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			var fr := Rect2(110, 404, 500, 72)
 			draw_rect(fr, Color("#f4f0ff"))
 			draw_rect(fr, Color("#ff6ad5"), false, 3.0)
 			var shown := login_text if login_text != "" else ("09xxxxxxxxx" if not login_sent else "------")
-			draw_string(f, Vector2(fr.position.x, fr.position.y + 54), shown, HORIZONTAL_ALIGNMENT_CENTER, fr.size.x, 36, Color("#140d2b") if login_text != "" else Color("#8a80b8"))
-			_btn(Rect2(Vector2(110, 470), Vector2(500, 70)), "ارسال کد" if not login_sent else "تأیید و ورود", Color("#3a2a7a"), 26)
-			draw_string(f, Vector2(0, 565), login_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#ffd166"))
+			draw_string(f, Vector2(fr.position.x, fr.position.y + 48), shown, HORIZONTAL_ALIGNMENT_CENTER, fr.size.x, 36, Color("#140d2b") if login_text != "" else Color("#8a80b8"))
+			_btn(Rect2(Vector2(110, 500), Vector2(500, 64)), "ارسال کد" if not login_sent else "تأیید و ورود", Color("#3a2a7a"), 26)
+			draw_string(f, Vector2(0, 596), login_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#ffd166"))
 			var pad := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "حذف", "0", "پاک"]
 			for i in pad.size():
 				_btn(_pad_rect(i), pad[i], Color("#2a1f55"), 30)
