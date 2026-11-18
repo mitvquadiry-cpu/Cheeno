@@ -906,11 +906,67 @@ func _btn(r: Rect2, text: String, fill := Color("#140d2b"), fs := 24, tc := Colo
 		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, tc)
 
 
-func _draw_avatar(c: Vector2, r: float) -> void:
+# آواتار: سر انسان با پوست، مو و چهره؛ ۶ مدل مو/شکل متفاوت
+func _ellipse(c: Vector2, rx: float, ry: float, n := 40) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for k in n:
+		var a := TAU * k / n
+		pts.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+	return pts
+
+func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
+	if idx < 0:
+		idx = Save.avatar
+	var bg := Color(AVATARS[idx])
+	var skin := Color("#f1c49a") if idx % 2 == 0 else Color("#c68a5c")
+	var hair := [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
+	var dark := Color("#2a1a12")
+	# پس‌زمینه دایره‌ای با حاشیه طلایی
 	draw_circle(c, r + 4, Color("#ffd166"))
-	draw_circle(c, r, Color(AVATARS[Save.avatar]))
-	draw_circle(c + Vector2(0, -r * 0.2), r * 0.32, Color(1, 1, 1, 0.85))
-	draw_circle(c + Vector2(0, r * 0.75), r * 0.55, Color(1, 1, 1, 0.85))
+	draw_circle(c, r, bg)
+	# بدن (شانه‌ها)
+	draw_colored_polygon(_ellipse(c + Vector2(0, r * 0.95), r * 0.62, r * 0.42), bg.darkened(0.2))
+	# مو پشت سر (برای مدل‌های بلند)
+	if idx == 1 or idx == 5:
+		draw_colored_polygon(_ellipse(c + Vector2(0, -r * 0.05), r * 0.5, r * 0.62), hair)
+	# گردن
+	draw_rect(Rect2(c + Vector2(-r * 0.16, r * 0.25), Vector2(r * 0.32, r * 0.35)), skin.darkened(0.08))
+	# سر
+	draw_colored_polygon(_ellipse(c + Vector2(0, -r * 0.1), r * 0.42, r * 0.5), skin)
+	# گوش‌ها
+	draw_circle(c + Vector2(-r * 0.41, -r * 0.05), r * 0.09, skin.darkened(0.05))
+	draw_circle(c + Vector2(r * 0.41, -r * 0.05), r * 0.09, skin.darkened(0.05))
+	# مو جلو سر بر اساس مدل
+	match idx:
+		0: # کوتاه
+			draw_colored_polygon(_ellipse(c + Vector2(0, -r * 0.3), r * 0.44, r * 0.25), hair)
+		1: # بلند با پونی
+			draw_colored_polygon(_ellipse(c + Vector2(0, -r * 0.32), r * 0.46, r * 0.26), hair)
+			draw_circle(c + Vector2(r * 0.42, -r * 0.2), r * 0.13, hair)
+		2: # کلاه
+			draw_colored_polygon(_ellipse(c + Vector2(0, -r * 0.36), r * 0.44, r * 0.2), Color("#ffd166"))
+			draw_rect(Rect2(c + Vector2(-r * 0.46, -r * 0.4), Vector2(r * 0.92, r * 0.08)), Color("#e0a800"))
+		3: # فر
+			for k in 7:
+				var a := PI + PI * k / 6.0
+				draw_circle(c + Vector2(cos(a) * r * 0.36, -r * 0.3 + sin(a) * r * 0.22), r * 0.14, hair)
+			draw_circle(c + Vector2(0, -r * 0.45), r * 0.18, hair)
+		4: # سیخی
+			for k in 5:
+				var x := -r * 0.3 + k * r * 0.15
+				draw_colored_polygon(PackedVector2Array([c + Vector2(x - r * 0.1, -r * 0.3), c + Vector2(x + r * 0.05, -r * 0.62), c + Vector2(x + r * 0.1, -r * 0.3)]), hair)
+		_: # موی کناری بلند
+			draw_colored_polygon(_ellipse(c + Vector2(-r * 0.12, -r * 0.34), r * 0.4, r * 0.24), hair)
+	# چشم‌ها و ابرو
+	draw_circle(c + Vector2(-r * 0.16, -r * 0.1), r * 0.05, dark)
+	draw_circle(c + Vector2(r * 0.16, -r * 0.1), r * 0.05, dark)
+	draw_line(c + Vector2(-r * 0.24, -r * 0.2), c + Vector2(-r * 0.08, -r * 0.22), dark, maxf(1.5, r * 0.03))
+	draw_line(c + Vector2(r * 0.08, -r * 0.22), c + Vector2(r * 0.24, -r * 0.2), dark, maxf(1.5, r * 0.03))
+	# لبخند
+	draw_arc(c + Vector2(0, -r * 0.02), r * 0.17, deg_to_rad(20), deg_to_rad(160), 14, dark, maxf(2.0, r * 0.04))
+	# گونه
+	draw_circle(c + Vector2(-r * 0.25, r * 0.07), r * 0.06, Color(1, 0.4, 0.5, 0.35))
+	draw_circle(c + Vector2(r * 0.25, r * 0.07), r * 0.06, Color(1, 0.4, 0.5, 0.35))
 
 
 func _draw() -> void:
@@ -1058,7 +1114,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			draw_string(f, Vector2(0, 540 - 70), "", HORIZONTAL_ALIGNMENT_CENTER, 720, 10)
 			for i in AVATARS.size():
 				var c := Vector2(110 + i * 95, 540)
-				draw_circle(c, 36, Color(AVATARS[i]))
+				_draw_avatar(c, 34, i)
 				if Save.avatar == i:
 					draw_arc(c, 42, 0, TAU, 32, Color.WHITE, 4.0)
 			var nm := "مهمان" if Api.token == "" else account_name
