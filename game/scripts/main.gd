@@ -8,10 +8,19 @@ const BOARD_PX := 600.0
 const LIFT := 110.0
 const SCORE_PER_GROW := 200      # هر ۲۰۰ امتیاز یک ردیف و ستون اضافه
 const SCORE_PER_SHAPE := 100     # هر ۱۰۰ امتیاز یک شکل سخت‌تر
-const LINES_PER_COIN := 10       # هر ۱۰ ردیف پاک‌شده، ۱ سکه
+const LINES_PER_COIN := 12       # هر ۱۲ ردیف پاک‌شده، ۱ سکه
 const HINT_COST := 5
-const SHUFFLE_COST := 10
-const CONTINUE_COST := 20
+const SHUFFLE_COST := 5
+const CONTINUE_COST := 10
+const UNDO_COST := 3
+const ROTATE_COST := 3
+const PACKS := [
+	{"id": "starter", "name": "بسته شروع (یک‌بار)", "coins": 1000, "price": 25000},
+	{"id": "small", "name": "بسته کوچک", "coins": 500, "price": 50000},
+	{"id": "medium", "name": "بسته معمولی", "coins": 1200, "price": 100000},
+	{"id": "large", "name": "بسته بزرگ", "coins": 3500, "price": 250000},
+	{"id": "mega", "name": "بسته ویژه", "coins": 8000, "price": 500000},
+]
 const UNDO_MOVES := 3
 
 # شکل‌ها از آسان به سخت
@@ -27,10 +36,10 @@ const START_SHAPES := 6
 
 const SKINS := [
 	{"name": "کلاسیک", "cost": 0, "colors": ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff"]},
-	{"name": "اقیانوس", "cost": 30, "colors": ["#4cc9f0", "#4895ef", "#4361ee", "#3a0ca3", "#48cae4"]},
-	{"name": "آبنبات", "cost": 60, "colors": ["#ff99c8", "#fcf6bd", "#d0f4de", "#a9def9", "#e4c1f9"]},
-	{"name": "جنگل", "cost": 100, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
-	{"name": "آتش", "cost": 150, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
+	{"name": "اقیانوس", "cost": 15, "colors": ["#4cc9f0", "#4895ef", "#4361ee", "#3a0ca3", "#48cae4"]},
+	{"name": "آبنبات", "cost": 30, "colors": ["#ff99c8", "#fcf6bd", "#d0f4de", "#a9def9", "#e4c1f9"]},
+	{"name": "جنگل", "cost": 50, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
+	{"name": "آتش", "cost": 80, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
 ]
 const AVATARS := ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff", "#ff7b00"]
 
@@ -56,6 +65,9 @@ var account_name := ""
 var account_best := 0
 var account_balance := -1
 var snd := {}
+var rot_mode := false
+var records: Array = []
+var records_state := ""
 
 
 func _ready() -> void:
@@ -180,11 +192,31 @@ func top_btn(i: int) -> Rect2:
 
 
 func hint_rect() -> Rect2:
-	return Rect2(Vector2(60, 1100), Vector2(280, 64))
+	return Rect2(Vector2(60, 1090), Vector2(280, 56))
 
 
 func shuffle_rect() -> Rect2:
-	return Rect2(Vector2(360, 1100), Vector2(280, 64))
+	return Rect2(Vector2(380, 1090), Vector2(280, 56))
+
+
+func undo_rect() -> Rect2:
+	return Rect2(Vector2(60, 1156), Vector2(280, 56))
+
+
+func rotate_rect() -> Rect2:
+	return Rect2(Vector2(380, 1156), Vector2(280, 56))
+
+
+func shop_rect() -> Rect2:
+	return Rect2(Vector2(30, 92), Vector2(200, 56))
+
+
+func records_rect() -> Rect2:
+	return Rect2(Vector2(490, 92), Vector2(200, 56))
+
+
+func pack_rect(i: int) -> Rect2:
+	return Rect2(Vector2(70, 400 + i * 100), Vector2(580, 88))
 
 
 func avatar_center() -> Vector2:
@@ -269,8 +301,25 @@ func _press(p: Vector2) -> void:
 		panel = "profile"
 		_play("click")
 		return
+	if shop_rect().has_point(p):
+		panel = "shop"
+		_play("click")
+		return
+	if records_rect().has_point(p):
+		panel = "records"
+		_play("click")
+		_load_records()
+		return
 	if hint_rect().has_point(p):
 		_use_hint()
+		return
+	if undo_rect().has_point(p):
+		_undo()
+		return
+	if rotate_rect().has_point(p):
+		rot_mode = not rot_mode
+		msg = "کارتی را که می‌خواهی بچرخانی لمس کن (%d سکه)" % ROTATE_COST if rot_mode else ""
+		_play("click")
 		return
 	if shuffle_rect().has_point(p):
 		_shuffle()
@@ -279,6 +328,10 @@ func _press(p: Vector2) -> void:
 	hint = {}
 	for i in hand.size():
 		if hand[i] != null and slot_rect(i).has_point(p):
+			if rot_mode:
+				rot_mode = false
+				_rotate(i)
+				return
 			drag = i
 			drag_pos = p
 			_play("pick")
@@ -335,6 +388,10 @@ func _press_panel(p: Vector2) -> void:
 				_apply_audio()
 			else:
 				_slider(p)
+		"shop":
+			for i in PACKS.size():
+				if pack_rect(i).has_point(p):
+					_buy_pack(PACKS[i].id)
 		"profile":
 			for i in AVATARS.size():
 				if Rect2(Vector2(70 + i * 95, 500), Vector2(80, 80)).has_point(p):
@@ -355,7 +412,7 @@ func _pick_skin(i: int) -> void:
 		Save.save()
 		msg = "پوسته خریداری شد"
 	else:
-		msg = "سکه کافی نیست (%d سکه)" % cost
+		_need_coins(cost)
 
 
 # پرداخت: با حساب وارد‌شده از سرور، وگرنه از سکه‌ی محلی
@@ -369,6 +426,70 @@ func _pay(amount: int, reason: String) -> bool:
 		account_balance = int(r.data.get("balance", account_balance))
 		return true
 	return Save.spend_coins(amount)
+
+
+func _need_coins(amount: int) -> void:
+	msg = "سکه کافی نیست (%d سکه لازم است). می‌توانی سکه بخری." % amount
+	panel = "shop"
+
+
+func _undo() -> void:
+	if game_over or history.is_empty():
+		msg = "حرکتی برای برگشت نیست"
+		return
+	if not await _pay(UNDO_COST, "undo"):
+		_need_coins(UNDO_COST)
+		return
+	_restore(history.pop_back())
+	msg = "یک حرکت برگشت"
+	_save_game()
+
+
+func _rotate(i: int) -> void:
+	if game_over or hand[i] == null:
+		return
+	if not await _pay(ROTATE_COST, "rotate"):
+		_need_coins(ROTATE_COST)
+		return
+	var cells: Array = hand[i].cells
+	var my := 0
+	for v in cells:
+		my = maxi(my, v.y)
+	var out := []
+	for v in cells:
+		out.append(Vector2i(my - v.y, v.x))
+	hand[i].cells = out
+	hint = {}
+	_play("pick")
+	if not _any_move_left():
+		game_over = true
+	_save_game()
+
+
+func _buy_pack(id: String) -> void:
+	if Api.token == "":
+		msg = "برای خرید باید وارد شوی (پروفایل)"
+		panel = "profile"
+		return
+	busy = true
+	var r: Dictionary = await Api.create_order(id)
+	busy = false
+	if r.ok and str(r.data.get("payment_url", "")) != "":
+		OS.shell_open(str(r.data.payment_url))
+		msg = "بعد از پرداخت به بازی برگرد؛ سکه‌ها خودکار اضافه می‌شوند"
+		panel = ""
+	else:
+		msg = str(r.data.get("message", "خطا در ساخت سفارش"))
+
+
+func _load_records() -> void:
+	records_state = "loading"
+	var r: Dictionary = await Api.leaderboard()
+	if r.ok and r.data.get("items") is Array:
+		records = r.data.items
+		records_state = "ok"
+	else:
+		records_state = "error"
 
 
 func _coins() -> int:
@@ -413,7 +534,7 @@ func _continue() -> void:
 		msg = "حرکتی برای برگشت نیست"
 		return
 	if not await _pay(CONTINUE_COST, "continue"):
-		msg = "سکه کافی نیست (%d سکه)" % CONTINUE_COST
+		_need_coins(CONTINUE_COST)
 		return
 	_restore(history[0])
 	history = []
@@ -425,7 +546,7 @@ func _shuffle() -> void:
 	if game_over:
 		return
 	if not await _pay(SHUFFLE_COST, "shuffle"):
-		msg = "سکه کافی نیست (%d سکه)" % SHUFFLE_COST
+		_need_coins(SHUFFLE_COST)
 		return
 	hand = _new_hand()
 	hint = {}
@@ -527,7 +648,7 @@ func _use_hint() -> void:
 		msg = "جای قانونی‌ای پیدا نشد"
 		return
 	if not await _pay(HINT_COST, "hint"):
-		msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
+		_need_coins(HINT_COST)
 		return
 	hint = found
 	msg = "قطعه‌ی روشن‌شده را روی خانه‌ی روشن بگذار"
@@ -715,10 +836,14 @@ func _draw() -> void:
 			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
 
 	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
-	_btn(shuffle_rect(), "عوض کردن کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
+	_btn(shuffle_rect(), "عوض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
+	_btn(undo_rect(), "برگشت حرکت: %d سکه" % UNDO_COST, Color("#140d2b"), 24)
+	_btn(rotate_rect(), "چرخش کارت: %d سکه" % ROTATE_COST, Color("#3a2a7a") if rot_mode else Color("#140d2b"), 24)
+	_btn(shop_rect(), "خرید سکه", Color("#3a2a7a"), 22)
+	_btn(records_rect(), "رکوردها", Color("#140d2b"), 22)
 
 	if msg != "":
-		draw_string(f, Vector2(0, 1210), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+		draw_string(f, Vector2(0, 1252), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.75))
@@ -736,7 +861,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	var pr := panel_rect()
 	draw_rect(pr, Color("#1a1036"))
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
-	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل"}[panel]
+	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "shop": "خرید سکه", "records": "رکوردها"}[panel]
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
 	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins(),
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
@@ -752,6 +877,23 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				var st: String = "انتخاب‌شده" if sel else ("مال شماست" if Save.owned.has(i) else "%d سکه" % SKINS[i].cost)
 				draw_string(f, Vector2(r.position.x + 210, r.position.y + 58), "%s  -  %s" % [SKINS[i].name, st],
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
+		"shop":
+			for i in PACKS.size():
+				var r := pack_rect(i)
+				draw_rect(r, Color("#140d2b"))
+				draw_rect(r, Color("#3c2a6e"), false, 2.0)
+				draw_string(f, Vector2(r.position.x + 20, r.position.y + 38), "%s" % PACKS[i].name, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
+				draw_string(f, Vector2(r.position.x + 20, r.position.y + 72), "%d سکه  -  %d تومان" % [PACKS[i].coins, PACKS[i].price], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("#ffd166"))
+		"records":
+			if records_state != "ok":
+				draw_string(f, Vector2(0, 560), "در حال بارگذاری..." if records_state == "loading" else "دریافت رکوردها ممکن نشد", HORIZONTAL_ALIGNMENT_CENTER, 720, 26, Color("#d9d0ff"))
+			else:
+				for i in mini(records.size(), 10):
+					var it: Dictionary = records[i]
+					var y := 420.0 + i * 48
+					draw_string(f, Vector2(80, y), "%d" % int(it.get("rank", i + 1)), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color("#ffd166"))
+					draw_string(f, Vector2(150, y), str(it.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
+					draw_string(f, Vector2(450, y), "%d" % int(it.get("score", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 170, 26, Color("#d9d0ff"))
 		"sound":
 			_btn(Rect2(Vector2(100, 440), Vector2(520, 70)), "صدا: خاموش (لمس کن)" if Save.muted else "صدا: روشن (لمس کن)", Color("#140d2b"), 26)
 			var s := _slider_rect()

@@ -22,6 +22,14 @@ func submit_score(score: int) -> Dictionary:
 	return await _request("score", HTTPClient.METHOD_POST, {"score": score})
 
 
+func create_order(pack: String) -> Dictionary:
+	return await _request("orders", HTTPClient.METHOD_POST, {"pack": pack})
+
+
+func leaderboard() -> Dictionary:
+	return await _request("leaderboard", HTTPClient.METHOD_GET)
+
+
 func spend(amount: int, reason: String) -> Dictionary:
 	return await _request("spend", HTTPClient.METHOD_POST, {"amount": amount, "reason": reason})
 
