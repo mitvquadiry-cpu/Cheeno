@@ -6,8 +6,8 @@ const MIN_N := 6
 const MAX_N := 10
 const BOARD_PX := 600.0
 const LIFT := 110.0
-const SCORE_PER_GROW := 200      # هر ۲۰۰ امتیاز یک ردیف و ستون اضافه
-const SCORE_PER_SHAPE := 100     # هر ۱۰۰ امتیاز یک شکل سخت‌تر
+const SCORE_PER_GROW := 30
+const SCORE_PER_SHAPE := 10
 const LINES_PER_COIN := 12       # هر ۱۲ ردیف پاک‌شده، ۱ سکه
 const HINT_COST := 5
 const SHUFFLE_COST := 5
@@ -510,7 +510,6 @@ func _place(i: int, c: Vector2i) -> void:
 	var piece: Dictionary = hand[i]
 	for v in piece.cells:
 		board[(c.y + v.y) * n + (c.x + v.x)] = piece.color + 1
-	score += 1
 	hand[i] = null
 	_play("place")
 	_clear_lines()
@@ -622,7 +621,7 @@ func _clear_lines() -> void:
 		})
 		board[idx] = 0
 	if lines > 0:
-		score += lines * 3
+		score += lines
 		_play("clear")
 		# سکه خیلی آهسته؛ فقط برای حساب محلی (حساب سرور فقط با خرید شارژ می‌شود)
 		Save.line_acc += lines
