@@ -41,6 +41,11 @@ jobs:
           echo AFTER; ls -la /usr/lib/android-sdk/build-tools /usr/lib/android-sdk/platforms
           ls /usr/lib/android-sdk/build-tools/33.0.2 | head -5
 
+      - name: Diagnose
+        run: |
+          echo TEMPLATES; ls -laL $HOME/.local/share/godot/export_templates/4.2.2.stable | head -40
+          echo PRESET; cat game/export_presets.cfg
+
       - name: Export APK
         working-directory: game
         run: |
