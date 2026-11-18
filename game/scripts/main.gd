@@ -80,6 +80,8 @@ func _ready() -> void:
 	if not _load_game():
 		new_game()
 	_handle_launch_uri()
+	if Api.token != "":
+		refresh_profile()
 
 
 func _parse(rows: Array) -> Array:
@@ -379,6 +381,7 @@ func _press_panel(p: Vector2) -> void:
 	_play("click")
 	if close_rect().has_point(p) or not panel_rect().has_point(p):
 		panel = ""
+		_close_login_edit()
 		Save.save()
 		return
 	match panel:
@@ -400,8 +403,81 @@ func _press_panel(p: Vector2) -> void:
 			for i in AVATARS.size():
 				if Rect2(Vector2(70 + i * 95, 500), Vector2(80, 80)).has_point(p):
 					Save.avatar = i
-			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p) and Api.token == "":
-				OS.shell_open(Api.BASE + "launch")
+					if Api.token != "":
+						Api.set_profile(i)
+			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p):
+				if Api.token == "":
+					_open_login()
+				else:
+					Api.logout()
+					account_name = ""
+					account_balance = 0
+		"login":
+			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p):
+				_login_step()
+
+
+var login_sent := false
+var login_msg := ""
+var login_busy := false
+var login_edit: LineEdit
+
+
+func _open_login() -> void:
+	panel = "login"
+	login_sent = false
+	login_msg = ""
+	if login_edit == null:
+		login_edit = LineEdit.new()
+		login_edit.keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+		login_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		login_edit.add_theme_font_size_override("font_size", 34)
+		login_edit.max_length = 14
+		add_child(login_edit)
+	login_edit.text = ""
+	login_edit.placeholder_text = "09xxxxxxxxx"
+	login_edit.position = Vector2(110, 490 + top_off)
+	login_edit.size = Vector2(500, 80)
+	login_edit.visible = true
+	login_edit.grab_focus()
+
+
+func _close_login_edit() -> void:
+	if login_edit:
+		login_edit.visible = false
+		login_edit.release_focus()
+
+
+func _login_step() -> void:
+	if login_busy:
+		return
+	login_busy = true
+	var txt := login_edit.text.strip_edges()
+	if not login_sent:
+		login_msg = "در حال ارسال…"
+		var r: Dictionary = await Api.otp_send(txt)
+		if r.ok:
+			login_sent = true
+			login_phone = txt
+			login_edit.text = ""
+			login_edit.placeholder_text = "کد"
+			login_msg = "کد ارسال شد"
+		else:
+			login_msg = str(r.data.get("message", "خطا در ارسال؛ اینترنت را بررسی کن"))
+	else:
+		login_msg = "در حال بررسی…"
+		var r2: Dictionary = await Api.otp_verify(login_phone, txt)
+		if r2.ok:
+			await refresh_profile()
+			Api.set_profile(Save.avatar)
+			_close_login_edit()
+			panel = "profile"
+		else:
+			login_msg = str(r2.data.get("message", "خطا؛ دوباره تلاش کن"))
+	login_busy = false
+
+
+var login_phone := ""
 
 
 func _pick_skin(i: int) -> void:
@@ -753,8 +829,15 @@ func _draw_background(vp: Vector2) -> void:
 
 func _btn(r: Rect2, text: String, fill := Color("#140d2b"), fs := 24, tc := Color.WHITE) -> void:
 	var f := ThemeDB.fallback_font
-	draw_rect(r, fill)
-	draw_rect(r, Color("#3c2a6e"), false, 2.0)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = fill
+	sb.set_corner_radius_all(int(minf(r.size.y * 0.3, 22.0)))
+	sb.border_color = Color("#7b5cff")
+	sb.set_border_width_all(2)
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 3)
+	draw_style_box(sb, r)
 	draw_string(f, Vector2(r.position.x, r.position.y + r.size.y / 2 + fs * 0.35), text,
 		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, tc)
 
@@ -866,7 +949,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	var pr := panel_rect()
 	draw_rect(pr, Color("#1a1036"))
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
-	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "shop": "خرید سکه", "records": "رکوردها"}[panel]
+	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها"}[panel]
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
 	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins(),
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
@@ -916,6 +999,9 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 					draw_arc(c, 42, 0, TAU, 32, Color.WHITE, 4.0)
 			var nm := "مهمان" if Api.token == "" else account_name
 			draw_string(f, Vector2(0, 610), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color.WHITE)
-			if Api.token == "":
-				_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام", Color("#3a2a7a"), 26)
+			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
+		"login":
+			draw_string(f, Vector2(0, 460), "شمارهٔ موبایل (مثل 09123456789)" if not login_sent else "کد پیامک‌شده را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ارسال کد" if not login_sent else "تأیید و ورود", Color("#3a2a7a"), 26)
+			draw_string(f, Vector2(0, 750), login_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	_btn(close_rect(), "بستن", Color("#140d2b"), 26)

@@ -5,6 +5,43 @@ extends Node
 const BASE := "https://game.donitoo.ir/?rest_route=/cheeno/v1/"
 
 var token := ""
+const TOKEN_FILE := "user://token.txt"
+
+
+func _ready() -> void:
+	if FileAccess.file_exists(TOKEN_FILE):
+		token = FileAccess.get_file_as_string(TOKEN_FILE).strip_edges()
+
+
+func device_id() -> String:
+	return OS.get_unique_id()
+
+
+func _store_token() -> void:
+	var f := FileAccess.open(TOKEN_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(token)
+
+
+func logout() -> void:
+	token = ""
+	_store_token()
+
+
+func otp_send(phone: String) -> Dictionary:
+	return await _request("otp/send", HTTPClient.METHOD_POST, {"phone": phone})
+
+
+func otp_verify(phone: String, code: String) -> Dictionary:
+	var r := await _request("otp/verify", HTTPClient.METHOD_POST, {"phone": phone, "code": code, "device": device_id()})
+	if r.ok:
+		token = str(r.data.get("token", ""))
+		_store_token()
+	return r
+
+
+func set_profile(avatar: int) -> Dictionary:
+	return await _request("profile", HTTPClient.METHOD_POST, {"avatar": avatar})
 
 
 func login(code: String) -> Dictionary:
@@ -23,7 +60,7 @@ func submit_score(score: int) -> Dictionary:
 
 
 func create_order(pack: String) -> Dictionary:
-	return await _request("orders", HTTPClient.METHOD_POST, {"pack": pack})
+	return await _request("orders", HTTPClient.METHOD_POST, {"pack": pack, "device": device_id()})
 
 
 func leaderboard() -> Dictionary:
