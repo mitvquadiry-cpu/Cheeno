@@ -555,8 +555,8 @@ func _rotate(i: int) -> void:
 
 func _buy_pack(id: String) -> void:
 	if Api.token == "":
-		msg = "برای خرید باید وارد شوی (پروفایل)"
-		panel = "profile"
+		msg = "برای خرید اول ثبت‌نام/ورود کن (شماره موبایل)"
+		panel = "login"
 		return
 	busy = true
 	var r: Dictionary = await Api.create_order(id)
@@ -958,7 +958,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
 	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها"}[panel]
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
-	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins(),
+	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if panel != "login" else "",
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	match panel:
 		"skins":
