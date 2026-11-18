@@ -736,7 +736,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	var pr := panel_rect()
 	draw_rect(pr, Color("#1a1036"))
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
-	var title := {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل"}[panel]
+	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل"}[panel]
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
 	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins(),
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
