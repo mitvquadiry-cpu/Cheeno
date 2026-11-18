@@ -749,7 +749,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				draw_rect(r, Color("#ffd166") if sel else Color("#3c2a6e"), false, 2.0)
 				for j in 5:
 					draw_rect(Rect2(r.position + Vector2(16 + j * 36, 24), Vector2(30, 48)), Color(SKINS[i].colors[j]))
-				var st := "انتخاب‌شده" if sel else ("مال شماست" if Save.owned.has(i) else "%d سکه" % SKINS[i].cost)
+				var st: String = "انتخاب‌شده" if sel else ("مال شماست" if Save.owned.has(i) else "%d سکه" % SKINS[i].cost)
 				draw_string(f, Vector2(r.position.x + 210, r.position.y + 58), "%s  -  %s" % [SKINS[i].name, st],
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
 		"sound":
