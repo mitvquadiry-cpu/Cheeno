@@ -433,6 +433,17 @@ func _open_login() -> void:
 		login_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		login_edit.add_theme_font_size_override("font_size", 34)
 		login_edit.max_length = 14
+		var lsb := StyleBoxFlat.new()
+		lsb.bg_color = Color("#f4f0ff")
+		lsb.set_corner_radius_all(18)
+		lsb.border_color = Color("#ff6ad5")
+		lsb.set_border_width_all(3)
+		for st in ["normal", "focus", "read_only"]:
+			login_edit.add_theme_stylebox_override(st, lsb)
+		login_edit.add_theme_color_override("font_color", Color("#140d2b"))
+		login_edit.add_theme_color_override("font_placeholder_color", Color("#8a80b8"))
+		login_edit.add_theme_color_override("caret_color", Color("#140d2b"))
+		login_edit.z_index = 100
 		add_child(login_edit)
 	login_edit.text = ""
 	login_edit.placeholder_text = "09xxxxxxxxx"
