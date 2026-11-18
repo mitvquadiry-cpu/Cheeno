@@ -379,17 +379,18 @@ func _top_action(i: int) -> void:
 
 func _press_panel(p: Vector2) -> void:
 	_play("click")
-	if panel == "login" and not close_rect().has_point(p) and panel_rect().has_point(p):
+	if panel == "login" and panel_rect().has_point(p) and not close_rect().has_point(p):
 		_login_pad(p)
 		if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
 			_login_step()
 		return
-	if close_rect().has_point(p) or not panel_rect().has_point(p):
-		if panel == "login" and not close_rect().has_point(p):
-			return
+	# لمس بیرون پنل یا غیر از دکمهٔ بستن، پنل را نمی‌بندد
+	if close_rect().has_point(p):
 		panel = ""
 		_close_login_edit()
 		Save.save()
+		return
+	if not panel_rect().has_point(p):
 		return
 	match panel:
 		"skins":
@@ -412,6 +413,10 @@ func _press_panel(p: Vector2) -> void:
 					Save.avatar = i
 					if Api.token != "":
 						Api.set_profile(i)
+			if Api.token != "" and Rect2(Vector2(110, 735), Vector2(500, 64)).has_point(p):
+				panel = "name"
+				name_text = ""
+				name_msg = ""
 			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
 					_open_login()
@@ -423,6 +428,10 @@ func _press_panel(p: Vector2) -> void:
 			_login_pad(p)
 			if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
 				_login_step()
+		"name":
+			_name_pad(p)
+			if Rect2(Vector2(110, 836), Vector2(500, 56)).has_point(p):
+				_name_save()
 
 
 var login_sent := false
@@ -454,6 +463,51 @@ func _login_pad(p: Vector2) -> void:
 				login_text = ""
 			elif login_text.length() < 11:
 				login_text += k
+
+
+var name_text := ""
+var name_msg := ""
+var name_busy := false
+const NAME_KEYS := ["ا","ب","پ","ت","ث","ج","چ","ح","خ","د","ذ","ر","ز","ژ","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ک","گ","ل","م","ن","و","ه","ی","0","1","2","3","4","5","6","7","8","9","_","فاصله","حذف"]
+
+
+func _name_key_rect(i: int) -> Rect2:
+	return Rect2(45 + (i % 6) * 106, 430 + (i / 6) * 50, 100, 44)
+
+
+func _name_pad(p: Vector2) -> void:
+	for i in NAME_KEYS.size():
+		if _name_key_rect(i).has_point(p):
+			var k: String = NAME_KEYS[i]
+			if k == "حذف":
+				name_text = name_text.substr(0, name_text.length() - 1)
+			elif k == "فاصله":
+				if name_text.length() < 12 and not name_text.ends_with(" ") and name_text != "":
+					name_text += " "
+			elif name_text.length() < 12:
+				name_text += k
+			return
+
+
+func _name_save() -> void:
+	if name_busy:
+		return
+	var txt := name_text.strip_edges()
+	if txt.length() < 2:
+		name_msg = "نام باید حداقل ۲ حرف باشد"
+		return
+	name_busy = true
+	name_msg = "در حال ذخیره…"
+	var r: Dictionary = await Api.set_profile(Save.avatar, txt)
+	if r.ok:
+		account_name = txt
+		name_msg = ""
+		panel = "profile"
+	elif r.code == 409:
+		name_msg = "این نام قبلاً گرفته شده، نام دیگری انتخاب کن"
+	else:
+		name_msg = str(r.data.get("message", "ذخیره نشد؛ دوباره تلاش کن"))
+	name_busy = false
 
 
 func _pad_rect(i: int) -> Rect2:
@@ -958,7 +1012,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
 	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها"}[panel]
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
-	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if panel != "login" else "",
+	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if panel != "login" and panel != "name" else "",
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	match panel:
 		"skins":
@@ -1007,6 +1061,18 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			var nm := "مهمان" if Api.token == "" else account_name
 			draw_string(f, Vector2(0, 610), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color.WHITE)
 			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
+			if Api.token != "":
+				_btn(Rect2(Vector2(110, 735), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
+		"name":
+			draw_string(f, Vector2(0, 318), "اسم خودت را بنویس (۲ تا ۱۲ حرف)", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			var nr := Rect2(110, 330, 500, 56)
+			draw_rect(nr, Color("#f4f0ff"))
+			draw_rect(nr, Color("#ff6ad5"), false, 3.0)
+			draw_string(f, Vector2(nr.position.x, nr.position.y + 38), name_text if name_text != "" else "نام", HORIZONTAL_ALIGNMENT_CENTER, nr.size.x, 30, Color("#140d2b") if name_text != "" else Color("#8a80b8"))
+			draw_string(f, Vector2(0, 408), name_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 20, Color("#ffd166"))
+			for i in NAME_KEYS.size():
+				_btn(_name_key_rect(i), NAME_KEYS[i], Color("#2a1f55"), 22)
+			_btn(Rect2(Vector2(110, 836), Vector2(500, 56)), "ذخیرهٔ نام", Color("#3a2a7a"), 26)
 		"login":
 			draw_string(f, Vector2(0, 372), "شمارهٔ موبایل (مثل 09123456789)" if not login_sent else "کد پیامک‌شده را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var fr := Rect2(110, 404, 500, 72)

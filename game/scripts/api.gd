@@ -40,8 +40,11 @@ func otp_verify(phone: String, code: String) -> Dictionary:
 	return r
 
 
-func set_profile(avatar: int) -> Dictionary:
-	return await _request("profile", HTTPClient.METHOD_POST, {"avatar": avatar})
+func set_profile(avatar: int, name := "") -> Dictionary:
+	var body := {"avatar": avatar}
+	if name != "":
+		body["name"] = name
+	return await _request("profile", HTTPClient.METHOD_POST, body)
 
 
 func login(code: String) -> Dictionary:
