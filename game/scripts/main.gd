@@ -23,11 +23,11 @@ const SHAPES := [
 	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1)],
 ]
 
-const DIFF_NAMES := ["آسان", "متوسط", "سخت"]
 const HINT_COST := 5
 
 var board_origin := Vector2((720 - N * CELL) / 2.0, 340)
-var difficulty := 1            # 0 آسان، 1 متوسط، 2 سخت
+var account_name := ""
+var account_best := 0
 var hint := {}                 # {"slot": int, "cell": Vector2i} یا خالی
 var msg := ""
 var board: Array = []          # 0 = خالی، عدد بالاتر = شماره‌ی رنگ + 1
@@ -52,9 +52,6 @@ func new_game() -> void:
 	board = []
 	board.resize(N * N)
 	board.fill(0)
-	if difficulty == 2:
-		for k in 6:
-			board[randi() % (N * N)] = randi() % COLORS.size() + 1
 	hand = _new_hand()
 	drag = -1
 	score = 0
@@ -64,17 +61,13 @@ func new_game() -> void:
 	queue_redraw()
 
 
-# آسان: فقط قطعه‌های کوچک
+# سختی خودکار: با بالا رفتن امتیاز، شکل‌های بزرگ‌تر وارد می‌شوند
 func _pool() -> Array:
-	return SHAPES.slice(0, 4) if difficulty == 0 else SHAPES
-
-
-func diff_rect(i: int) -> Rect2:
-	return Rect2(Vector2(60 + i * 200, 258), Vector2(180, 40))
+	return SHAPES.slice(0, clampi(4 + score / 150, 4, SHAPES.size()))
 
 
 func bulb_rect() -> Rect2:
-	return Rect2(Vector2(60, 1100), Vector2(600, 56))
+	return Rect2(Vector2(60, 1100), Vector2(580, 44))
 
 
 func _new_hand() -> Array:
@@ -116,12 +109,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _press(p: Vector2) -> void:
-	for i in 3:
-		if diff_rect(i).has_point(p):
-			difficulty = i
-			new_game()
-			msg = "درجه سختی: " + DIFF_NAMES[i]
-			return
 	if bulb_rect().has_point(p):
 		_use_hint()
 		return
@@ -169,6 +156,8 @@ func _place(i: int, c: Vector2i) -> void:
 	if not _any_move_left():
 		game_over = true
 		Save.set_best(score)
+		if Api.token != "":
+			Api.submit_score(score)
 
 
 # موقعیت گوشه‌ی بالا-چپ قطعه‌ی در حال کشیدن (کمی بالاتر از انگشت)
@@ -273,9 +262,10 @@ func _draw() -> void:
 	var f := ThemeDB.fallback_font
 
 	draw_string(f, Vector2(0, 130), "Cheeno", HORIZONTAL_ALIGNMENT_CENTER, 720, 56, Color.WHITE)
-	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, Save.get_coins(), Save.best_score]
+	var coins_now: int = Save.get_coins() if Api.token == "" else account_balance
+	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, coins_now, maxi(Save.best_score, account_best)]
 	draw_string(f, Vector2(0, 200), info, HORIZONTAL_ALIGNMENT_CENTER, 720, 30, Color("#d9d0ff"))
-	var acc := "برای ورود به حساب، اینجا لمس کن" if Api.token == "" else "سکه‌ی حساب: %d" % account_balance
+	var acc := "برای ورود به حساب، اینجا لمس کن" if Api.token == "" else "کاربر: " + account_name
 	draw_string(f, Vector2(0, 240), acc, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 
 	# قاب تخته
@@ -291,18 +281,6 @@ func _draw() -> void:
 			var col: Color = Color("#2a1f4f") if v == 0 else COLORS[v - 1]
 			_draw_block(cell_pos(c, r), CELL, col)
 
-	# پیش‌نمایش جای قطعه و قطعه‌ی در حال کشیدن
-	if drag >= 0:
-		var piece: Dictionary = hand[drag]
-		var col: Color = COLORS[piece.color]
-		var target := _target_cell(drag, drag_pos)
-		if _can_place(piece.cells, target):
-			for v in piece.cells:
-				_draw_block(cell_pos(target.x + v.x, target.y + v.y), CELL, col, 0.35)
-		var tl := _ghost_tl(drag, drag_pos)
-		for v in piece.cells:
-			_draw_block(tl + Vector2(v) * CELL, CELL, col)
-
 	# قطعه‌های ردیف پایین
 	for i in hand.size():
 		var rect := slot_rect(i)
@@ -317,18 +295,22 @@ func _draw() -> void:
 		for v in piece.cells:
 			_draw_block(origin + Vector2(v) * HAND_CELL, HAND_CELL, COLORS[piece.color])
 
+	# پیش‌نمایش جای قطعه و قطعه‌ی در حال کشیدن
+	if drag >= 0:
+		var piece: Dictionary = hand[drag]
+		var col: Color = COLORS[piece.color]
+		var target := _target_cell(drag, drag_pos)
+		if _can_place(piece.cells, target):
+			for v in piece.cells:
+				_draw_block(cell_pos(target.x + v.x, target.y + v.y), CELL, col, 0.35)
+		var tl := _ghost_tl(drag, drag_pos)
+		for v in piece.cells:
+			_draw_block(tl + Vector2(v) * CELL, CELL, col)
+
 	# جلوه‌ی پاک شدن ردیف
 	for fl in flashes:
 		var k: float = fl["t"] / 0.5
 		draw_arc(fl["pos"], 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(fl["color"], 1.0 - k), 4.0)
-
-	# دکمه‌های سختی
-	for i in 3:
-		var dr := diff_rect(i)
-		var on := i == difficulty
-		draw_rect(dr, Color("#ffd166") if on else Color("#2a1f4f"))
-		draw_rect(dr, Color("#4b3a8a"), false, 2.0)
-		draw_string(f, dr.position + Vector2(0, 28), DIFF_NAMES[i], HORIZONTAL_ALIGNMENT_CENTER, dr.size.x, 22, Color("#1a1036") if on else Color.WHITE)
 
 	# هایلایت راهنما
 	if not hint.is_empty():
@@ -376,11 +358,25 @@ func _use_hint() -> void:
 	if found.is_empty():
 		msg = "جای قانونی‌ای پیدا نشد"
 		return
-	if not Save.spend_coins(HINT_COST):
+	if Api.token != "":
+		var r: Dictionary = await Api.spend(HINT_COST, "hint")
+		if not r.ok:
+			msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
+			return
+		account_balance = int(r.data.get("balance", account_balance))
+	elif not Save.spend_coins(HINT_COST):
 		msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
 		return
 	hint = found
 	msg = "قطعه‌ی روشن‌شده را روی خانه‌ی روشن بگذار"
+
+
+func refresh_profile() -> void:
+	var r: Dictionary = await Api.balance()
+	if r.ok:
+		account_balance = int(r.data.get("balance", 0))
+		account_name = str(r.data.get("name", ""))
+		account_best = int(r.data.get("best", 0))
 
 
 func _handle_launch_uri() -> void:
@@ -389,6 +385,6 @@ func _handle_launch_uri() -> void:
 			var code := arg.get_slice("code=", 1).get_slice("&", 0).uri_decode()
 			var r: Dictionary = await Api.login(code)
 			if r.ok:
-				account_balance = int(r.data.get("balance", 0))
+				await refresh_profile()
 				queue_redraw()
 			return

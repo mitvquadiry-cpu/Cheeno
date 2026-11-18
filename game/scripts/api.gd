@@ -18,6 +18,10 @@ func balance() -> Dictionary:
 	return await _request("balance", HTTPClient.METHOD_GET)
 
 
+func submit_score(score: int) -> Dictionary:
+	return await _request("score", HTTPClient.METHOD_POST, {"score": score})
+
+
 func spend(amount: int, reason: String) -> Dictionary:
 	return await _request("spend", HTTPClient.METHOD_POST, {"amount": amount, "reason": reason})
 
