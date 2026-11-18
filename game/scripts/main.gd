@@ -23,7 +23,13 @@ const SHAPES := [
 	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1)],
 ]
 
-var board_origin := Vector2((720 - N * CELL) / 2.0, 280)
+const DIFF_NAMES := ["آسان", "متوسط", "سخت"]
+const HINT_COST := 5
+
+var board_origin := Vector2((720 - N * CELL) / 2.0, 340)
+var difficulty := 1            # 0 آسان، 1 متوسط، 2 سخت
+var hint := {}                 # {"slot": int, "cell": Vector2i} یا خالی
+var msg := ""
 var board: Array = []          # 0 = خالی، عدد بالاتر = شماره‌ی رنگ + 1
 var hand: Array = []           # Dictionary {cells, color} یا null
 var drag := -1                 # اندیس قطعه‌ای که در حال کشیدن است
@@ -46,19 +52,37 @@ func new_game() -> void:
 	board = []
 	board.resize(N * N)
 	board.fill(0)
+	if difficulty == 2:
+		for k in 6:
+			board[randi() % (N * N)] = randi() % COLORS.size() + 1
 	hand = _new_hand()
 	drag = -1
 	score = 0
 	game_over = false
 	flashes = []
+	hint = {}
 	queue_redraw()
+
+
+# آسان: فقط قطعه‌های کوچک
+func _pool() -> Array:
+	return SHAPES.slice(0, 4) if difficulty == 0 else SHAPES
+
+
+func diff_rect(i: int) -> Rect2:
+	return Rect2(Vector2(60 + i * 200, 258), Vector2(180, 40))
+
+
+func bulb_rect() -> Rect2:
+	return Rect2(Vector2(60, 1100), Vector2(600, 56))
 
 
 func _new_hand() -> Array:
 	var h := []
+	var pool := _pool()
 	for i in 3:
 		h.append({
-			"cells": SHAPES[randi() % SHAPES.size()],
+			"cells": pool[randi() % pool.size()],
 			"color": randi() % COLORS.size(),
 		})
 	return h
@@ -92,9 +116,20 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _press(p: Vector2) -> void:
+	for i in 3:
+		if diff_rect(i).has_point(p):
+			difficulty = i
+			new_game()
+			msg = "درجه سختی: " + DIFF_NAMES[i]
+			return
+	if bulb_rect().has_point(p):
+		_use_hint()
+		return
 	if game_over:
 		new_game()
 		return
+	msg = ""
+	hint = {}
 	for i in hand.size():
 		if hand[i] != null and slot_rect(i).has_point(p):
 			drag = i
@@ -120,6 +155,7 @@ func _release(p: Vector2) -> void:
 
 
 func _place(i: int, c: Vector2i) -> void:
+	hint = {}
 	var piece: Dictionary = hand[i]
 	for v in piece.cells:
 		board[(c.y + v.y) * N + (c.x + v.x)] = piece.color + 1
@@ -286,12 +322,65 @@ func _draw() -> void:
 		var k: float = fl["t"] / 0.5
 		draw_arc(fl["pos"], 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(fl["color"], 1.0 - k), 4.0)
 
-	draw_string(f, Vector2(0, 1160), "قطعه را بگیر و روی جای خالی تخته رها کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#8c7fb3"))
+	# دکمه‌های سختی
+	for i in 3:
+		var dr := diff_rect(i)
+		var on := i == difficulty
+		draw_rect(dr, Color("#ffd166") if on else Color("#2a1f4f"))
+		draw_rect(dr, Color("#4b3a8a"), false, 2.0)
+		draw_string(f, dr.position + Vector2(0, 28), DIFF_NAMES[i], HORIZONTAL_ALIGNMENT_CENTER, dr.size.x, 22, Color("#1a1036") if on else Color.WHITE)
+
+	# هایلایت راهنما
+	if not hint.is_empty():
+		var pulse := 0.5 + 0.5 * sin(time * 6.0)
+		var hc := Color(1, 0.84, 0.4, pulse)
+		var slot_r := slot_rect(hint.slot)
+		draw_rect(slot_r, hc, false, 4.0)
+		for v in hand[hint.slot].cells:
+			var cp: Vector2i = hint.cell + v
+			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(CELL, CELL)), hc, false, 4.0)
+
+	# دکمه‌ی لامپ راهنما
+	var br := bulb_rect()
+	draw_rect(br, Color("#140d2b"))
+	draw_rect(br, Color("#3c2a6e"), false, 2.0)
+	draw_circle(br.position + Vector2(36, 28), 16, Color("#ffd166"))
+	draw_rect(Rect2(br.position + Vector2(30, 40), Vector2(12, 8)), Color("#b08a2e"))
+	draw_string(f, br.position + Vector2(70, 38), "راهنما: %d سکه" % HINT_COST, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
+
+	if msg != "":
+		draw_string(f, Vector2(0, 1190), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#d9d0ff"))
 
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.7))
 		draw_string(f, Vector2(0, 600), "بازی تمام شد", HORIZONTAL_ALIGNMENT_CENTER, 720, 52, Color.WHITE)
 		draw_string(f, Vector2(0, 660), "برای شروع دوباره لمس کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color("#d9d0ff"))
+
+
+# یک جای قانونی برای یکی از قطعه‌های فعلی پیدا می‌کند
+func _find_hint() -> Dictionary:
+	for i in hand.size():
+		if hand[i] == null:
+			continue
+		for r in N:
+			for c in N:
+				if _can_place(hand[i].cells, Vector2i(c, r)):
+					return {"slot": i, "cell": Vector2i(c, r)}
+	return {}
+
+
+func _use_hint() -> void:
+	if game_over or not hint.is_empty():
+		return
+	var found := _find_hint()
+	if found.is_empty():
+		msg = "جای قانونی‌ای پیدا نشد"
+		return
+	if not Save.spend_coins(HINT_COST):
+		msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
+		return
+	hint = found
+	msg = "قطعه‌ی روشن‌شده را روی خانه‌ی روشن بگذار"
 
 
 func _handle_launch_uri() -> void:
