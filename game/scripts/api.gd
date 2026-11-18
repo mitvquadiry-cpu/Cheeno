@@ -2,7 +2,7 @@ extends Node
 
 # کلاینت API افزونه‌ی cheeno-wallet.
 # فعلاً در بازی استفاده نمی‌شود؛ برای اتصال حساب و خرید در مراحل بعد.
-const BASE := "https://game.donitoo.ir/wp-json/cheeno/v1/"
+const BASE := "https://game.donitoo.ir/?rest_route=/cheeno/v1/"
 
 var token := ""
 
