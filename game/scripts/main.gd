@@ -1,93 +1,217 @@
 extends Node2D
 
-# پازل بلوکی ۸×۸. قطعه را از ردیف پایین بگیر و روی تخته بکش.
+# Cheeno: پازل بلوکی. تخته از ۶×۶ شروع می‌شود و تا ۱۰×۱۰ بزرگ می‌شود.
 
-const N := 8
-const CELL := 60.0
-const HAND_CELL := 40.0
-const LIFT := 110.0          # فاصله‌ی قطعه‌ی در حال کشیدن از انگشت، تا دیده شود
-
-const COLORS := [
-	Color("#ff6ad5"), Color("#6bd6ff"), Color("#ffd166"),
-	Color("#9ff0c9"), Color("#7b5cff"),
-]
-
-const SHAPES := [
-	[Vector2i(0, 0)],
-	[Vector2i(0, 0), Vector2i(1, 0)],
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)],
-	[Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2)],
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)],
-	[Vector2i(0, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)],
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1)],
-]
-
+const MIN_N := 6
+const MAX_N := 10
+const BOARD_PX := 600.0
+const LIFT := 110.0
+const SCORE_PER_GROW := 200      # هر ۲۰۰ امتیاز یک ردیف و ستون اضافه
+const SCORE_PER_SHAPE := 100     # هر ۱۰۰ امتیاز یک شکل سخت‌تر
+const LINES_PER_COIN := 10       # هر ۱۰ ردیف پاک‌شده، ۱ سکه
 const HINT_COST := 5
+const SHUFFLE_COST := 10
+const CONTINUE_COST := 20
+const UNDO_MOVES := 3
 
-var board_origin := Vector2((720 - N * CELL) / 2.0, 340)
-var account_name := ""
-var account_best := 0
-var hint := {}                 # {"slot": int, "cell": Vector2i} یا خالی
-var msg := ""
-var board: Array = []          # 0 = خالی، عدد بالاتر = شماره‌ی رنگ + 1
-var hand: Array = []           # Dictionary {cells, color} یا null
-var drag := -1                 # اندیس قطعه‌ای که در حال کشیدن است
+# شکل‌ها از آسان به سخت
+const SHAPE_STR := [
+	["#"], ["##"], ["###"], ["#", "#", "#"], ["##", "##"], ["#.", "#.", "##"],
+	["####"], ["###", ".#."], ["#..", "###"], ["##", ".##"], [".##", "##."],
+	["###", "#.#"], ["#", "#", "#", "#"], ["###", "###"], ["##", "#.", "#."],
+	["###", "#..", "#.."], ["#####"], [".#.", "###", ".#."], ["###", "###", "###"],
+	["##.", ".#.", ".##"], ["#.#", "###", "#.#"], ["####", "#..."], ["#.#", ".#.", "#.#"],
+	["#####", "#...."], ["##.", "###", ".##"], ["#...#", "#####"],
+]
+const START_SHAPES := 6
+
+const SKINS := [
+	{"name": "کلاسیک", "cost": 0, "colors": ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff"]},
+	{"name": "اقیانوس", "cost": 30, "colors": ["#4cc9f0", "#4895ef", "#4361ee", "#3a0ca3", "#48cae4"]},
+	{"name": "آبنبات", "cost": 60, "colors": ["#ff99c8", "#fcf6bd", "#d0f4de", "#a9def9", "#e4c1f9"]},
+	{"name": "جنگل", "cost": 100, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
+	{"name": "آتش", "cost": 150, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
+]
+const AVATARS := ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff", "#ff7b00"]
+
+var shapes: Array = []
+var n := MIN_N
+var cell := BOARD_PX / MIN_N
+var board_origin := Vector2(60, 260)
+var board: Array = []
+var hand: Array = []
+var drag := -1
 var drag_pos := Vector2.ZERO
-var tap_candidate := false     # برای لمس بالای صفحه (ورود)
 var score := 0
 var game_over := false
-var account_balance := -1
-var flashes: Array = []        # جلوه‌ی پاک شدن ردیف
+var flashes: Array = []
+var history: Array = []
+var hint := {}
+var msg := ""
 var time := 0.0
+var panel := ""                  # "", skins, sound, profile
+var reset_armed := 0.0
+var busy := false
+var account_name := ""
+var account_best := 0
+var account_balance := -1
+var snd := {}
 
 
 func _ready() -> void:
 	randomize()
-	new_game()
+	for s in SHAPE_STR:
+		shapes.append(_parse(s))
+	_make_sounds()
+	_apply_audio()
+	if not _load_game():
+		new_game()
 	_handle_launch_uri()
 
 
-func new_game() -> void:
+func _parse(rows: Array) -> Array:
+	var out := []
+	for y in rows.size():
+		for x in (rows[y] as String).length():
+			if rows[y][x] == "#":
+				out.append(Vector2i(x, y))
+	return out
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_save_game()
+
+
+# ---------- وضعیت بازی ----------
+
+func set_size(v: int) -> void:
+	var old := board.duplicate()
+	var on := n
+	n = v
+	cell = BOARD_PX / n
 	board = []
-	board.resize(N * N)
+	board.resize(n * n)
 	board.fill(0)
-	hand = _new_hand()
-	drag = -1
+	for r in mini(on, n):
+		for c in mini(on, n):
+			if old.size() == on * on:
+				board[r * n + c] = old[r * on + c]
+
+
+func new_game() -> void:
+	n = MIN_N
+	cell = BOARD_PX / n
+	board = []
+	board.resize(n * n)
+	board.fill(0)
 	score = 0
 	game_over = false
 	flashes = []
+	history = []
 	hint = {}
-	queue_redraw()
+	hand = _new_hand()
+	Save.game = {}
+	Save.save()
 
 
-# سختی خودکار: با بالا رفتن امتیاز، شکل‌های بزرگ‌تر وارد می‌شوند
+func _snap() -> Dictionary:
+	return {"n": n, "board": board.duplicate(), "hand": hand.duplicate(true), "score": score}
+
+
+func _restore(s: Dictionary) -> void:
+	n = int(s.n)
+	cell = BOARD_PX / n
+	board = (s.board as Array).duplicate()
+	hand = (s.hand as Array).duplicate(true)
+	score = int(s.score)
+	game_over = false
+	hint = {}
+	drag = -1
+
+
+func _save_game() -> void:
+	if game_over:
+		Save.game = {}
+	else:
+		Save.game = _snap()
+	Save.save()
+
+
+func _load_game() -> bool:
+	var g: Dictionary = Save.game
+	if g.is_empty() or not g.has("board") or not g.has("hand") or not g.has("n"):
+		return false
+	if int(g.n) < MIN_N or int(g.n) > MAX_N or (g.board as Array).size() != int(g.n) * int(g.n):
+		return false
+	_restore(g)
+	return true
+
+
 func _pool() -> Array:
-	return SHAPES.slice(0, clampi(4 + score / 150, 4, SHAPES.size()))
-
-
-func bulb_rect() -> Rect2:
-	return Rect2(Vector2(60, 1100), Vector2(580, 44))
+	return shapes.slice(0, clampi(START_SHAPES + score / SCORE_PER_SHAPE, START_SHAPES, shapes.size()))
 
 
 func _new_hand() -> Array:
 	var h := []
 	var pool := _pool()
+	var cols: Array = SKINS[Save.skin].colors
 	for i in 3:
-		h.append({
-			"cells": pool[randi() % pool.size()],
-			"color": randi() % COLORS.size(),
-		})
+		h.append({"cells": pool[randi() % pool.size()], "color": randi() % cols.size()})
 	return h
 
 
+func _col(i: int) -> Color:
+	return Color((SKINS[Save.skin].colors as Array)[i % 5])
+
+
+# ---------- مکان‌ها ----------
+
 func cell_pos(c: int, r: int) -> Vector2:
-	return board_origin + Vector2(c, r) * CELL
+	return board_origin + Vector2(c, r) * cell
 
 
 func slot_rect(i: int) -> Rect2:
-	return Rect2(Vector2(60 + i * 200, 900), Vector2(180, 180))
+	return Rect2(Vector2(60 + i * 200, 895), Vector2(180, 180))
 
+
+func top_btn(i: int) -> Rect2:
+	return Rect2(Vector2(15 + i * 140, 10), Vector2(130, 50))
+
+
+func hint_rect() -> Rect2:
+	return Rect2(Vector2(60, 1100), Vector2(280, 64))
+
+
+func shuffle_rect() -> Rect2:
+	return Rect2(Vector2(360, 1100), Vector2(280, 64))
+
+
+func avatar_center() -> Vector2:
+	return Vector2(360, 120)
+
+
+func panel_rect() -> Rect2:
+	return Rect2(Vector2(40, 280), Vector2(640, 720))
+
+
+func close_rect() -> Rect2:
+	return Rect2(Vector2(220, 920), Vector2(280, 56))
+
+
+func cont_rect() -> Rect2:
+	return Rect2(Vector2(110, 640), Vector2(500, 70))
+
+
+func restart_rect() -> Rect2:
+	return Rect2(Vector2(110, 730), Vector2(500, 70))
+
+
+func skin_rect(i: int) -> Rect2:
+	return Rect2(Vector2(70, 340 + i * 110), Vector2(580, 96))
+
+
+# ---------- حلقه ----------
 
 func _process(delta: float) -> void:
 	time += delta
@@ -98,22 +222,58 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if time < 1.5:
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_press(event.position)
 		else:
 			_release(event.position)
-	elif event is InputEventMouseMotion and drag >= 0:
-		drag_pos = event.position
-		tap_candidate = false
+	elif event is InputEventMouseMotion:
+		if drag >= 0:
+			drag_pos = event.position
+		elif panel == "sound" and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_slider(event.position)
+
+
+func _slider_rect() -> Rect2:
+	return Rect2(Vector2(100, 560), Vector2(520, 40))
+
+
+func _slider(p: Vector2) -> void:
+	var r := _slider_rect()
+	if p.y > r.position.y - 30 and p.y < r.end.y + 30:
+		Save.volume = clampf((p.x - r.position.x) / r.size.x, 0.0, 1.0)
+		_apply_audio()
 
 
 func _press(p: Vector2) -> void:
-	if bulb_rect().has_point(p):
-		_use_hint()
+	if busy:
+		return
+	if panel != "":
+		_press_panel(p)
 		return
 	if game_over:
-		new_game()
+		if cont_rect().has_point(p):
+			_continue()
+		elif restart_rect().has_point(p):
+			new_game()
+			_play("click")
+		return
+	for i in 5:
+		if top_btn(i).has_point(p):
+			_play("click")
+			_top_action(i)
+			return
+	if p.distance_to(avatar_center()) < 50:
+		panel = "profile"
+		_play("click")
+		return
+	if hint_rect().has_point(p):
+		_use_hint()
+		return
+	if shuffle_rect().has_point(p):
+		_shuffle()
 		return
 	msg = ""
 	hint = {}
@@ -121,36 +281,119 @@ func _press(p: Vector2) -> void:
 		if hand[i] != null and slot_rect(i).has_point(p):
 			drag = i
 			drag_pos = p
-			tap_candidate = false
+			_play("pick")
 			return
-	tap_candidate = p.y < 240 and Api.token == ""
 
 
 func _release(p: Vector2) -> void:
-	if drag >= 0:
-		var i := drag
-		drag = -1
-		var piece: Dictionary = hand[i]
-		var c := _target_cell(i, p)
-		if _can_place(piece.cells, c):
-			_place(i, c)
-		queue_redraw()
+	if drag < 0:
 		return
-	if tap_candidate:
-		tap_candidate = false
-		OS.shell_open(Api.BASE + "launch")
+	var i := drag
+	drag = -1
+	var piece: Dictionary = hand[i]
+	var c := _target_cell(i, p)
+	if _can_place(piece.cells, c):
+		_place(i, c)
 
+
+func _top_action(i: int) -> void:
+	match i:
+		0:
+			_save_game()
+			msg = "بازی ذخیره شد"
+		1:
+			if reset_armed > time:
+				new_game()
+				msg = "بازی تازه شروع شد"
+				reset_armed = 0.0
+			else:
+				reset_armed = time + 3.0
+				msg = "برای شروع از اول، دوباره «ریست» را لمس کن"
+		2:
+			panel = "skins"
+		3:
+			panel = "sound"
+		4:
+			_save_game()
+			get_tree().quit()
+
+
+func _press_panel(p: Vector2) -> void:
+	_play("click")
+	if close_rect().has_point(p) or not panel_rect().has_point(p):
+		panel = ""
+		Save.save()
+		return
+	match panel:
+		"skins":
+			for i in SKINS.size():
+				if skin_rect(i).has_point(p):
+					_pick_skin(i)
+		"sound":
+			if Rect2(Vector2(100, 440), Vector2(520, 70)).has_point(p):
+				Save.muted = not Save.muted
+				_apply_audio()
+			else:
+				_slider(p)
+		"profile":
+			for i in AVATARS.size():
+				if Rect2(Vector2(70 + i * 95, 500), Vector2(80, 80)).has_point(p):
+					Save.avatar = i
+			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p) and Api.token == "":
+				OS.shell_open(Api.BASE + "launch")
+
+
+func _pick_skin(i: int) -> void:
+	if Save.owned.has(i):
+		Save.skin = i
+		Save.save()
+		return
+	var cost: int = SKINS[i].cost
+	if await _pay(cost, "skin_%d" % i):
+		Save.owned.append(i)
+		Save.skin = i
+		Save.save()
+		msg = "پوسته خریداری شد"
+	else:
+		msg = "سکه کافی نیست (%d سکه)" % cost
+
+
+# پرداخت: با حساب وارد‌شده از سرور، وگرنه از سکه‌ی محلی
+func _pay(amount: int, reason: String) -> bool:
+	if Api.token != "":
+		busy = true
+		var r: Dictionary = await Api.spend(amount, reason)
+		busy = false
+		if not r.ok:
+			return false
+		account_balance = int(r.data.get("balance", account_balance))
+		return true
+	return Save.spend_coins(amount)
+
+
+func _coins() -> int:
+	return Save.get_coins() if Api.token == "" else account_balance
+
+
+# ---------- منطق ----------
 
 func _place(i: int, c: Vector2i) -> void:
 	hint = {}
+	history.append(_snap())
+	if history.size() > UNDO_MOVES:
+		history.pop_front()
 	var piece: Dictionary = hand[i]
 	for v in piece.cells:
-		board[(c.y + v.y) * N + (c.x + v.x)] = piece.color + 1
-	score += piece.cells.size()
+		board[(c.y + v.y) * n + (c.x + v.x)] = piece.color + 1
+	score += 1
 	hand[i] = null
-
+	_play("place")
 	_clear_lines()
 
+	var want := clampi(MIN_N + score / SCORE_PER_GROW, MIN_N, MAX_N)
+	if want > n:
+		set_size(want)
+		msg = "تخته بزرگ‌تر شد: %d×%d" % [n, n]
 	if hand.all(func(x): return x == null):
 		hand = _new_hand()
 	if not _any_move_left():
@@ -158,17 +401,47 @@ func _place(i: int, c: Vector2i) -> void:
 		Save.set_best(score)
 		if Api.token != "":
 			Api.submit_score(score)
+		_play("over")
+		Save.game = {}
+		Save.save()
+	else:
+		_save_game()
 
 
-# موقعیت گوشه‌ی بالا-چپ قطعه‌ی در حال کشیدن (کمی بالاتر از انگشت)
+func _continue() -> void:
+	if history.is_empty():
+		msg = "حرکتی برای برگشت نیست"
+		return
+	if not await _pay(CONTINUE_COST, "continue"):
+		msg = "سکه کافی نیست (%d سکه)" % CONTINUE_COST
+		return
+	_restore(history[0])
+	history = []
+	msg = "سه حرکت برگشتی؛ ادامه بده"
+	_save_game()
+
+
+func _shuffle() -> void:
+	if game_over:
+		return
+	if not await _pay(SHUFFLE_COST, "shuffle"):
+		msg = "سکه کافی نیست (%d سکه)" % SHUFFLE_COST
+		return
+	hand = _new_hand()
+	hint = {}
+	_play("pick")
+	if not _any_move_left():
+		game_over = true
+	_save_game()
+
+
 func _ghost_tl(i: int, p: Vector2) -> Vector2:
 	var sz := _piece_size(hand[i].cells)
-	return p - Vector2(sz) * CELL * 0.5 - Vector2(0, LIFT)
+	return p - Vector2(sz) * cell * 0.5 - Vector2(0, LIFT)
 
 
-# خانه‌ای از تخته که قطعه‌ی در حال کشیدن روی آن قرار می‌گیرد
 func _target_cell(i: int, p: Vector2) -> Vector2i:
-	var local := (_ghost_tl(i, p) - board_origin) / CELL
+	var local := (_ghost_tl(i, p) - board_origin) / cell
 	return Vector2i(roundi(local.x), roundi(local.y))
 
 
@@ -185,9 +458,9 @@ func _can_place(cells: Array, c: Vector2i) -> bool:
 	for v in cells:
 		var x: int = c.x + v.x
 		var y: int = c.y + v.y
-		if x < 0 or y < 0 or x >= N or y >= N:
+		if x < 0 or y < 0 or x >= n or y >= n:
 			return false
-		if board[y * N + x] != 0:
+		if board[y * n + x] != 0:
 			return false
 	return true
 
@@ -196,8 +469,8 @@ func _any_move_left() -> bool:
 	for piece in hand:
 		if piece == null:
 			continue
-		for r in N:
-			for c in N:
+		for r in n:
+			for c in n:
 				if _can_place(piece.cells, Vector2i(c, r)):
 					return true
 	return false
@@ -206,146 +479,41 @@ func _any_move_left() -> bool:
 func _clear_lines() -> void:
 	var clear := {}
 	var lines := 0
-	for r in N:
-		if range(N).all(func(c): return board[r * N + c] != 0):
+	for r in n:
+		if range(n).all(func(c): return board[r * n + c] != 0):
 			lines += 1
-			for c in N:
-				clear[r * N + c] = true
-	for c in N:
-		if range(N).all(func(r): return board[r * N + c] != 0):
+			for c in n:
+				clear[r * n + c] = true
+	for c in n:
+		if range(n).all(func(r): return board[r * n + c] != 0):
 			lines += 1
-			for r in N:
-				clear[r * N + c] = true
+			for r in n:
+				clear[r * n + c] = true
 	for idx in clear:
 		flashes.append({
-			"pos": cell_pos(idx % N, idx / N) + Vector2(CELL / 2, CELL / 2),
-			"color": COLORS[board[idx] - 1],
+			"pos": cell_pos(idx % n, idx / n) + Vector2(cell / 2, cell / 2),
+			"color": _col(board[idx] - 1),
 			"t": 0.0,
 		})
 		board[idx] = 0
 	if lines > 0:
-		score += lines * 10
-		Save.add_coins(lines)
+		score += lines * 3
+		_play("clear")
+		# سکه خیلی آهسته؛ فقط برای حساب محلی (حساب سرور فقط با خرید شارژ می‌شود)
+		Save.line_acc += lines
+		while Save.line_acc >= LINES_PER_COIN:
+			Save.line_acc -= LINES_PER_COIN
+			if Api.token == "":
+				Save.coins += 1
+		Save.save()
 
 
-# ---------- نقاشی ----------
-
-func _with_alpha(col: Color, a: float) -> Color:
-	var c := col
-	c.a *= a
-	return c
-
-
-# بلوک دوبعدی با سایه، برجستگی بالایی و لبه‌ی تیره تا عمق داشته باشد
-func _draw_block(pos: Vector2, size: float, col: Color, alpha := 1.0) -> void:
-	var s := size * 0.9
-	var p := pos + Vector2((size - s) / 2, (size - s) / 2)
-	draw_rect(Rect2(p + Vector2(0, 5), Vector2(s, s)), _with_alpha(Color.BLACK, 0.35 * alpha))
-	draw_rect(Rect2(p, Vector2(s, s)), _with_alpha(col, alpha))
-	draw_rect(Rect2(p, Vector2(s, s * 0.2)), _with_alpha(Color.WHITE, 0.28 * alpha))
-	draw_rect(Rect2(p + Vector2(0, s * 0.8), Vector2(s, s * 0.2)), _with_alpha(Color.BLACK, 0.2 * alpha))
-
-
-func _draw_background(vp: Vector2) -> void:
-	var top := Color("#1b0f3a")
-	var bot := Color("#070311")
-	draw_polygon(
-		PackedVector2Array([Vector2.ZERO, Vector2(vp.x, 0), vp, Vector2(0, vp.y)]),
-		PackedColorArray([top, top, bot, bot]))
-	draw_circle(Vector2(vp.x * 0.2, 180), 220, Color(1, 0.42, 0.84, 0.08))
-	draw_circle(Vector2(vp.x * 0.85, 1000), 260, Color(0.42, 0.36, 1, 0.08))
-
-
-func _draw() -> void:
-	var vp := get_viewport_rect().size
-	_draw_background(vp)
-	var f := ThemeDB.fallback_font
-
-	draw_string(f, Vector2(0, 130), "Cheeno", HORIZONTAL_ALIGNMENT_CENTER, 720, 56, Color.WHITE)
-	var coins_now: int = Save.get_coins() if Api.token == "" else account_balance
-	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, coins_now, maxi(Save.best_score, account_best)]
-	draw_string(f, Vector2(0, 200), info, HORIZONTAL_ALIGNMENT_CENTER, 720, 30, Color("#d9d0ff"))
-	var acc := "برای ورود به حساب، اینجا لمس کن" if Api.token == "" else "کاربر: " + account_name
-	draw_string(f, Vector2(0, 240), acc, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
-
-	# قاب تخته
-	var frame := Rect2(board_origin - Vector2(14, 14), Vector2(N * CELL + 28, N * CELL + 28))
-	draw_rect(Rect2(frame.position + Vector2(0, 10), frame.size), Color(0, 0, 0, 0.45))
-	draw_rect(frame, Color("#1a1036"))
-	draw_rect(frame, Color("#4b3a8a"), false, 2.0)
-
-	# خانه‌ها
-	for r in N:
-		for c in N:
-			var v: int = board[r * N + c]
-			var col: Color = Color("#2a1f4f") if v == 0 else COLORS[v - 1]
-			_draw_block(cell_pos(c, r), CELL, col)
-
-	# قطعه‌های ردیف پایین
-	for i in hand.size():
-		var rect := slot_rect(i)
-		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color(0, 0, 0, 0.3))
-		draw_rect(rect, Color("#140d2b"))
-		draw_rect(rect, Color("#3c2a6e"), false, 2.0)
-		var piece = hand[i]
-		if piece == null or i == drag:
-			continue
-		var sz := _piece_size(piece.cells)
-		var origin := rect.position + (rect.size - Vector2(sz) * HAND_CELL) / 2
-		for v in piece.cells:
-			_draw_block(origin + Vector2(v) * HAND_CELL, HAND_CELL, COLORS[piece.color])
-
-	# پیش‌نمایش جای قطعه و قطعه‌ی در حال کشیدن
-	if drag >= 0:
-		var piece: Dictionary = hand[drag]
-		var col: Color = COLORS[piece.color]
-		var target := _target_cell(drag, drag_pos)
-		if _can_place(piece.cells, target):
-			for v in piece.cells:
-				_draw_block(cell_pos(target.x + v.x, target.y + v.y), CELL, col, 0.35)
-		var tl := _ghost_tl(drag, drag_pos)
-		for v in piece.cells:
-			_draw_block(tl + Vector2(v) * CELL, CELL, col)
-
-	# جلوه‌ی پاک شدن ردیف
-	for fl in flashes:
-		var k: float = fl["t"] / 0.5
-		draw_arc(fl["pos"], 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(fl["color"], 1.0 - k), 4.0)
-
-	# هایلایت راهنما
-	if not hint.is_empty():
-		var pulse := 0.5 + 0.5 * sin(time * 6.0)
-		var hc := Color(1, 0.84, 0.4, pulse)
-		var slot_r := slot_rect(hint.slot)
-		draw_rect(slot_r, hc, false, 4.0)
-		for v in hand[hint.slot].cells:
-			var cp: Vector2i = hint.cell + v
-			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(CELL, CELL)), hc, false, 4.0)
-
-	# دکمه‌ی لامپ راهنما
-	var br := bulb_rect()
-	draw_rect(br, Color("#140d2b"))
-	draw_rect(br, Color("#3c2a6e"), false, 2.0)
-	draw_circle(br.position + Vector2(36, 28), 16, Color("#ffd166"))
-	draw_rect(Rect2(br.position + Vector2(30, 40), Vector2(12, 8)), Color("#b08a2e"))
-	draw_string(f, br.position + Vector2(70, 38), "راهنما: %d سکه" % HINT_COST, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
-
-	if msg != "":
-		draw_string(f, Vector2(0, 1190), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#d9d0ff"))
-
-	if game_over:
-		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.7))
-		draw_string(f, Vector2(0, 600), "بازی تمام شد", HORIZONTAL_ALIGNMENT_CENTER, 720, 52, Color.WHITE)
-		draw_string(f, Vector2(0, 660), "برای شروع دوباره لمس کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color("#d9d0ff"))
-
-
-# یک جای قانونی برای یکی از قطعه‌های فعلی پیدا می‌کند
 func _find_hint() -> Dictionary:
 	for i in hand.size():
 		if hand[i] == null:
 			continue
-		for r in N:
-			for c in N:
+		for r in n:
+			for c in n:
 				if _can_place(hand[i].cells, Vector2i(c, r)):
 					return {"slot": i, "cell": Vector2i(c, r)}
 	return {}
@@ -358,13 +526,7 @@ func _use_hint() -> void:
 	if found.is_empty():
 		msg = "جای قانونی‌ای پیدا نشد"
 		return
-	if Api.token != "":
-		var r: Dictionary = await Api.spend(HINT_COST, "hint")
-		if not r.ok:
-			msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
-			return
-		account_balance = int(r.data.get("balance", account_balance))
-	elif not Save.spend_coins(HINT_COST):
+	if not await _pay(HINT_COST, "hint"):
 		msg = "سکه کافی نیست (%d سکه لازم است)" % HINT_COST
 		return
 	hint = found
@@ -386,5 +548,227 @@ func _handle_launch_uri() -> void:
 			var r: Dictionary = await Api.login(code)
 			if r.ok:
 				await refresh_profile()
-				queue_redraw()
 			return
+
+
+# ---------- صدا (ساخته‌شده با کد) ----------
+
+func _wave(notes: Array, dur: float, vol: float, sweep := 0.0) -> AudioStreamWAV:
+	var rate := 22050
+	var per := int(rate * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(per * notes.size() * 2)
+	var k := 0
+	for f in notes:
+		var ph := 0.0
+		for i in per:
+			var t := float(i) / per
+			ph += TAU * (f * (1.0 + sweep * t)) / rate
+			var env := pow(1.0 - t, 1.6) * minf(1.0, t * 40.0)
+			var v := (sin(ph) * 0.8 + sin(ph * 2.0) * 0.2) * env * vol
+			bytes.encode_s16(k * 2, int(clampf(v, -1.0, 1.0) * 32000))
+			k += 1
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = rate
+	w.data = bytes
+	return w
+
+
+func _make_sounds() -> void:
+	var defs := {
+		"place": _wave([330.0], 0.12, 0.7, -0.4),
+		"pick": _wave([660.0], 0.05, 0.4),
+		"click": _wave([880.0], 0.04, 0.35),
+		"clear": _wave([523.0, 659.0, 784.0, 1047.0], 0.09, 0.6),
+		"over": _wave([392.0, 330.0, 262.0], 0.22, 0.6),
+	}
+	for k in defs:
+		var p := AudioStreamPlayer.new()
+		p.stream = defs[k]
+		add_child(p)
+		snd[k] = p
+
+
+func _play(name: String) -> void:
+	if snd.has(name) and not Save.muted:
+		snd[name].play()
+
+
+func _apply_audio() -> void:
+	AudioServer.set_bus_mute(0, Save.muted)
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(Save.volume, 0.0001)))
+
+
+# ---------- نقاشی ----------
+
+func _with_alpha(col: Color, a: float) -> Color:
+	var c := col
+	c.a *= a
+	return c
+
+
+func _draw_block(pos: Vector2, size: float, col: Color, alpha := 1.0) -> void:
+	var s := size * 0.9
+	var p := pos + Vector2((size - s) / 2, (size - s) / 2)
+	draw_rect(Rect2(p + Vector2(0, 4), Vector2(s, s)), _with_alpha(Color.BLACK, 0.35 * alpha))
+	draw_rect(Rect2(p, Vector2(s, s)), _with_alpha(col, alpha))
+	draw_rect(Rect2(p, Vector2(s, s * 0.2)), _with_alpha(Color.WHITE, 0.28 * alpha))
+	draw_rect(Rect2(p + Vector2(0, s * 0.8), Vector2(s, s * 0.2)), _with_alpha(Color.BLACK, 0.2 * alpha))
+
+
+func _draw_background(vp: Vector2) -> void:
+	var top := Color("#1b0f3a")
+	var bot := Color("#070311")
+	draw_polygon(
+		PackedVector2Array([Vector2.ZERO, Vector2(vp.x, 0), vp, Vector2(0, vp.y)]),
+		PackedColorArray([top, top, bot, bot]))
+	draw_circle(Vector2(vp.x * 0.2, 180), 220, Color(1, 0.42, 0.84, 0.08))
+	draw_circle(Vector2(vp.x * 0.85, 1000), 260, Color(0.42, 0.36, 1, 0.08))
+
+
+func _btn(r: Rect2, text: String, fill := Color("#140d2b"), fs := 24, tc := Color.WHITE) -> void:
+	var f := ThemeDB.fallback_font
+	draw_rect(r, fill)
+	draw_rect(r, Color("#3c2a6e"), false, 2.0)
+	draw_string(f, Vector2(r.position.x, r.position.y + r.size.y / 2 + fs * 0.35), text,
+		HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, tc)
+
+
+func _draw_avatar(c: Vector2, r: float) -> void:
+	draw_circle(c, r + 4, Color("#ffd166"))
+	draw_circle(c, r, Color(AVATARS[Save.avatar]))
+	draw_circle(c + Vector2(0, -r * 0.2), r * 0.32, Color(1, 1, 1, 0.85))
+	draw_circle(c + Vector2(0, r * 0.75), r * 0.55, Color(1, 1, 1, 0.85))
+
+
+func _draw() -> void:
+	var vp := get_viewport_rect().size
+	var f := ThemeDB.fallback_font
+	if time < 1.5:
+		draw_rect(Rect2(Vector2.ZERO, vp), Color.BLACK)
+		draw_string(f, Vector2(0, 600), "Cheeno", HORIZONTAL_ALIGNMENT_CENTER, 720, 72, Color.WHITE)
+		draw_string(f, Vector2(0, 680), "در حال بارگذاری...", HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color("#d9d0ff"))
+		draw_rect(Rect2(Vector2(160, 720), Vector2(400, 10)), Color("#2a1f4f"))
+		draw_rect(Rect2(Vector2(160, 720), Vector2(400 * clampf(time / 1.5, 0, 1), 10)), Color("#ff6ad5"))
+		return
+	_draw_background(vp)
+
+	var labels := ["ذخیره", "ریست", "پوسته", "صدا", "خروج"]
+	for i in 5:
+		var lb: String = labels[i]
+		if i == 3 and Save.muted:
+			lb = "بی‌صدا"
+		_btn(top_btn(i), lb, Color("#140d2b"), 22)
+
+	_draw_avatar(avatar_center(), 38)
+	var nm := "مهمان (لمس کن)" if Api.token == "" else account_name
+	draw_string(f, Vector2(0, 195), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
+	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, _coins(), maxi(Save.best_score, account_best)]
+	draw_string(f, Vector2(0, 232), info, HORIZONTAL_ALIGNMENT_CENTER, 720, 26, Color("#d9d0ff"))
+
+	var side := n * cell
+	var frame := Rect2(board_origin - Vector2(14, 14), Vector2(side + 28, side + 28))
+	draw_rect(Rect2(frame.position + Vector2(0, 10), frame.size), Color(0, 0, 0, 0.45))
+	draw_rect(frame, Color("#1a1036"))
+	draw_rect(frame, Color("#4b3a8a"), false, 2.0)
+	for r in n:
+		for c in n:
+			var v: int = board[r * n + c]
+			_draw_block(cell_pos(c, r), cell, Color("#2a1f4f") if v == 0 else _col(v - 1))
+
+	for i in hand.size():
+		var rect := slot_rect(i)
+		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color(0, 0, 0, 0.3))
+		draw_rect(rect, Color("#140d2b"))
+		draw_rect(rect, Color("#3c2a6e"), false, 2.0)
+		var piece = hand[i]
+		if piece == null or i == drag:
+			continue
+		var sz := _piece_size(piece.cells)
+		var hc := minf(40.0, 160.0 / maxi(sz.x, sz.y))
+		var origin := rect.position + (rect.size - Vector2(sz) * hc) / 2
+		for v in piece.cells:
+			_draw_block(origin + Vector2(v) * hc, hc, _col(piece.color))
+
+	if drag >= 0:
+		var piece: Dictionary = hand[drag]
+		var col := _col(piece.color)
+		var target := _target_cell(drag, drag_pos)
+		if _can_place(piece.cells, target):
+			for v in piece.cells:
+				_draw_block(cell_pos(target.x + v.x, target.y + v.y), cell, col, 0.35)
+		var tl := _ghost_tl(drag, drag_pos)
+		for v in piece.cells:
+			_draw_block(tl + Vector2(v) * cell, cell, col)
+
+	for fl in flashes:
+		var k: float = fl["t"] / 0.5
+		draw_arc(fl["pos"], 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(fl["color"], 1.0 - k), 4.0)
+
+	if not hint.is_empty():
+		var pulse := 0.5 + 0.5 * sin(time * 6.0)
+		var hc2 := Color(1, 0.84, 0.4, pulse)
+		draw_rect(slot_rect(hint.slot), hc2, false, 4.0)
+		for v in hand[hint.slot].cells:
+			var cp: Vector2i = hint.cell + v
+			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
+
+	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
+	_btn(shuffle_rect(), "عوض کردن کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
+
+	if msg != "":
+		draw_string(f, Vector2(0, 1210), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+
+	if game_over:
+		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.75))
+		draw_string(f, Vector2(0, 540), "بازی تمام شد", HORIZONTAL_ALIGNMENT_CENTER, 720, 52, Color.WHITE)
+		draw_string(f, Vector2(0, 590), "امتیاز: %d" % score, HORIZONTAL_ALIGNMENT_CENTER, 720, 30, Color("#d9d0ff"))
+		_btn(cont_rect(), "ادامه (۳ حرکت برگرد): %d سکه" % CONTINUE_COST, Color("#3a2a7a"), 26)
+		_btn(restart_rect(), "شروع از اول", Color("#140d2b"), 26)
+
+	if panel != "":
+		_draw_panel(vp, f)
+
+
+func _draw_panel(vp: Vector2, f: Font) -> void:
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.75))
+	var pr := panel_rect()
+	draw_rect(pr, Color("#1a1036"))
+	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
+	var title := {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل"}[panel]
+	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
+	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins(),
+		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
+	match panel:
+		"skins":
+			for i in SKINS.size():
+				var r := skin_rect(i)
+				var sel: bool = Save.skin == i
+				draw_rect(r, Color("#3a2a7a") if sel else Color("#140d2b"))
+				draw_rect(r, Color("#ffd166") if sel else Color("#3c2a6e"), false, 2.0)
+				for j in 5:
+					draw_rect(Rect2(r.position + Vector2(16 + j * 36, 24), Vector2(30, 48)), Color(SKINS[i].colors[j]))
+				var st := "انتخاب‌شده" if sel else ("مال شماست" if Save.owned.has(i) else "%d سکه" % SKINS[i].cost)
+				draw_string(f, Vector2(r.position.x + 210, r.position.y + 58), "%s  -  %s" % [SKINS[i].name, st],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
+		"sound":
+			_btn(Rect2(Vector2(100, 440), Vector2(520, 70)), "صدا: خاموش (لمس کن)" if Save.muted else "صدا: روشن (لمس کن)", Color("#140d2b"), 26)
+			var s := _slider_rect()
+			draw_string(f, Vector2(0, 545), "میزان صدا", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			draw_rect(s, Color("#2a1f4f"))
+			draw_rect(Rect2(s.position, Vector2(s.size.x * Save.volume, s.size.y)), Color("#ff6ad5"))
+			draw_circle(Vector2(s.position.x + s.size.x * Save.volume, s.position.y + 20), 24, Color.WHITE)
+		"profile":
+			_draw_avatar(Vector2(360, 440), 50)
+			draw_string(f, Vector2(0, 540 - 70), "", HORIZONTAL_ALIGNMENT_CENTER, 720, 10)
+			for i in AVATARS.size():
+				var c := Vector2(110 + i * 95, 540)
+				draw_circle(c, 36, Color(AVATARS[i]))
+				if Save.avatar == i:
+					draw_arc(c, 42, 0, TAU, 32, Color.WHITE, 4.0)
+			var nm := "مهمان" if Api.token == "" else account_name
+			draw_string(f, Vector2(0, 610), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color.WHITE)
+			if Api.token == "":
+				_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام", Color("#3a2a7a"), 26)
+	_btn(close_rect(), "بستن", Color("#140d2b"), 26)
