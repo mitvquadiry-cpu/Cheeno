@@ -36,10 +36,10 @@ const START_SHAPES := 6
 
 const SKINS := [
 	{"name": "کلاسیک", "cost": 0, "colors": ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff"]},
-	{"name": "اقیانوس", "cost": 15, "colors": ["#4cc9f0", "#4895ef", "#4361ee", "#3a0ca3", "#48cae4"]},
-	{"name": "آبنبات", "cost": 30, "colors": ["#ff99c8", "#fcf6bd", "#d0f4de", "#a9def9", "#e4c1f9"]},
-	{"name": "جنگل", "cost": 50, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
-	{"name": "آتش", "cost": 80, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
+	{"name": "اقیانوس", "cost": 30, "colors": ["#4cc9f0", "#4895ef", "#4361ee", "#3a0ca3", "#48cae4"]},
+	{"name": "آبنبات", "cost": 60, "colors": ["#ff99c8", "#fcf6bd", "#d0f4de", "#a9def9", "#e4c1f9"]},
+	{"name": "جنگل", "cost": 100, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
+	{"name": "آتش", "cost": 150, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
 ]
 const AVATARS := ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff", "#ff7b00"]
 
@@ -64,6 +64,7 @@ var busy := false
 var account_name := ""
 var account_best := 0
 var account_balance := -1
+var top_off := 0.0
 var snd := {}
 var rot_mode := false
 var records: Array = []
@@ -253,9 +254,12 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _unhandled_input(ev: InputEvent) -> void:
 	if time < 1.5:
 		return
+	var event := ev.duplicate()
+	if event is InputEventMouse:
+		event.position.y -= top_off
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_press(event.position)
@@ -774,6 +778,8 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(160, 720), Vector2(400 * clampf(time / 1.5, 0, 1), 10)), Color("#ff6ad5"))
 		return
 	_draw_background(vp)
+	top_off = clampf((vp.y - 1280.0) * 0.5, 0.0, 90.0)
+	draw_set_transform(Vector2(0, top_off))
 
 	var labels := ["ذخیره", "ریست", "پوسته", "صدا", "خروج"]
 	for i in 5:
