@@ -41,12 +41,22 @@ jobs:
           cp $HOME/.config/godot/editor_settings-4.tres $HOME/.config/godot/editor_settings-4.2.tres
           cat $HOME/.config/godot/editor_settings-4.tres
 
+      - name: Diagnose Android SDK
+        run: |
+          echo "JAVA_DIR=$JAVA_DIR"; ls "$JAVA_DIR" | head
+          echo "SDK_DIR=$SDK_DIR"; ls "$SDK_DIR"
+          echo "--- build-tools"; ls "$SDK_DIR/build-tools" || true
+          echo "--- platforms"; ls "$SDK_DIR/platforms" || true
+          echo "--- cmdline-tools"; ls "$SDK_DIR/cmdline-tools" || true
+          echo "--- env"; env | grep -i -E "android|java" || true
+          echo "--- tpl"; ls -la $HOME/.local/share/godot/export_templates/4.2.2.stable/ | head -30
+
       - name: Export APK
         working-directory: game
         run: |
           mkdir -p ../build
           godot --headless --import || true
-          godot --headless --export-debug "Android" ../build/cheeno.apk
+          godot --headless --verbose --export-debug "Android" ../build/cheeno.apk
 
       - uses: actions/upload-artifact@v4
         with:
