@@ -810,6 +810,10 @@ func refresh_profile() -> void:
 		account_balance = int(r.data.get("balance", 0))
 		account_name = str(r.data.get("name", ""))
 		account_best = int(r.data.get("best", 0))
+		for s in r.data.get("skins", []):
+			if not Save.owned.has(int(s)):
+				Save.owned.append(int(s))
+		Save.save()
 
 
 func _handle_launch_uri() -> void:
