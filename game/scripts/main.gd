@@ -929,7 +929,7 @@ func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 		idx = Save.avatar
 	var bg := Color(AVATARS[idx])
 	var skin := Color("#f1c49a") if idx % 2 == 0 else Color("#c68a5c")
-	var hair := [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
+	var hair: Color = [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
 	var dark := Color("#2a1a12")
 	# پس‌زمینه دایره‌ای با حاشیه طلایی
 	draw_circle(c, r + 4, Color("#ffd166"))
