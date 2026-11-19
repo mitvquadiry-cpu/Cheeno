@@ -94,8 +94,9 @@ func _parse(rows: Array) -> Array:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_save_game()
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == 		_save_game()
+	elif what == NOTIFICATION_APPLICATION_RESUMED and Api.token != "":
+		refresh_profile()
 
 
 # ---------- وضعیت بازی ----------
@@ -761,12 +762,20 @@ func _clear_lines() -> void:
 		score += lines
 		_play("clear")
 		# سکه خیلی آهسته؛ فقط برای حساب محلی (حساب سرور فقط با خرید شارژ می‌شود)
+		if Api.token != "":
+			_send_lines(lines)
 		Save.line_acc += lines
 		while Save.line_acc >= LINES_PER_COIN:
 			Save.line_acc -= LINES_PER_COIN
 			if Api.token == "":
 				Save.coins += 1
 		Save.save()
+
+
+func _send_lines(k: int) -> void:
+	var r: Dictionary = await Api.submit_lines(k)
+	if r.ok:
+		account_balance = int(r.data.get("balance", account_balance))
 
 
 func _find_hint() -> Dictionary:
@@ -917,10 +926,9 @@ func _ellipse(c: Vector2, rx: float, ry: float, n := 40) -> PackedVector2Array:
 func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 	if idx < 0:
 		idx = Save.avatar
-	idx = clampi(idx, 0, AVATARS.size() - 1)
 	var bg := Color(AVATARS[idx])
-	var skin: Color = Color("#f1c49a") if idx % 2 == 0 else Color("#c68a5c")
-	var hair: Color = [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
+	var skin := Color("#f1c49a") if idx % 2 == 0 else Color("#c68a5c")
+	var hair := [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
 	var dark := Color("#2a1a12")
 	# پس‌زمینه دایره‌ای با حاشیه طلایی
 	draw_circle(c, r + 4, Color("#ffd166"))

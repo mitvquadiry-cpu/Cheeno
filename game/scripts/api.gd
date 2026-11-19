@@ -66,6 +66,10 @@ func create_order(pack: String) -> Dictionary:
 	return await _request("orders", HTTPClient.METHOD_POST, {"pack": pack, "device": device_id()})
 
 
+func submit_lines(lines: int) -> Dictionary:
+	return await _request("lines", HTTPClient.METHOD_POST, {"lines": lines})
+
+
 func leaderboard() -> Dictionary:
 	return await _request("leaderboard", HTTPClient.METHOD_GET)
 
