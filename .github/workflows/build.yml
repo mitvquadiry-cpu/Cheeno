@@ -58,14 +58,7 @@ jobs:
           echo "4.2.2.stable" > android/.build_version
           touch android/.gdignore
           unzip -q -o "$SRC" -d android/build
-          python3 - <<'PY'
-          p = "android/build/AndroidManifest.xml"
-          s = open(p).read()
-          f = '<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter>'
-          i = s.index("</activity>")
-          s = s[:i] + f + s[i:]
-          open(p, "w").write(s)
-          PY
+          sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter></activity>#' android/build/AndroidManifest.xml
           grep -n -B2 -A2 cheeno android/build/AndroidManifest.xml
 
       - name: Export APK
