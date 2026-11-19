@@ -49,6 +49,25 @@ jobs:
           echo KEYS; keytool -list -keystore $HOME/.android/debug.keystore -storepass android || true
           echo JAVA; ls /usr/lib/jvm; ls /usr/lib/jvm/java-17-openjdk-amd64/bin | head -20
 
+      - name: Prepare Android custom build
+        working-directory: game
+        run: |
+          SRC=$(find / -name android_source.zip -not -path '*/proc/*' 2>/dev/null | head -1)
+          echo "source: $SRC"
+          mkdir -p android/build
+          echo "4.2.2.stable" > android/.build_version
+          touch android/.gdignore
+          unzip -q -o "$SRC" -d android/build
+          python3 - <<'PY'
+          p = "android/build/AndroidManifest.xml"
+          s = open(p).read()
+          f = '<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter>'
+          i = s.index("</activity>")
+          s = s[:i] + f + s[i:]
+          open(p, "w").write(s)
+          PY
+          grep -n -B2 -A2 cheeno android/build/AndroidManifest.xml
+
       - name: Export APK
         working-directory: game
         run: |
