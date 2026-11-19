@@ -20,6 +20,7 @@ jobs:
           mkdir -p $HOME/.local/share/godot/export_templates
           ln -sfn "$TPL_DIR" $HOME/.local/share/godot/export_templates/4.2.2.stable
           mkdir -p $HOME/.android
+          cp game/ci/debug.keystore "$KS"
           if [ ! -f "$KS" ]; then
             keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore "$KS" -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
           fi
@@ -58,7 +59,7 @@ jobs:
           echo "4.2.2.stable" > android/.build_version
           touch android/.gdignore
           unzip -q -o "$SRC" -d android/build
-          sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter></activity>#' android/build/AndroidManifest.xml
+          sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter><intent-filter android:autoVerify="true"><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="https" android:host="game.donitoo.ir" android:pathPrefix="/app-return"/></intent-filter></activity>#' android/build/AndroidManifest.xml
           grep -n -B2 -A2 cheeno android/build/AndroidManifest.xml
 
       - name: Export APK
