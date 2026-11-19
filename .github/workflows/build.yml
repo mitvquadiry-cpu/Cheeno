@@ -63,11 +63,22 @@ jobs:
           grep -n -B2 -A2 cheeno android/build/AndroidManifest.xml
 
       - name: Export APK
+        env:
+          RELEASE_KS_B64: ${{ secrets.RELEASE_KS_B64 }}
+          RELEASE_KS_PASS: ${{ secrets.RELEASE_KS_PASS }}
         working-directory: game
         run: |
           mkdir -p ../build
           godot --headless --import || true
-          godot --headless --verbose --export-debug "Android" ../build/cheeno.apk
+          if [ -n "$RELEASE_KS_B64" ]; then
+            echo "$RELEASE_KS_B64" | base64 -d > $HOME/release.p12
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.p12
+            export GODOT_ANDROID_KEYSTORE_RELEASE_USER=cheeno
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$RELEASE_KS_PASS"
+            godot --headless --verbose --export-release "Android" ../build/cheeno.apk
+          else
+            godot --headless --verbose --export-debug "Android" ../build/cheeno.apk
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
