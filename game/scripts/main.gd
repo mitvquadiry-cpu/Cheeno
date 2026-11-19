@@ -94,7 +94,8 @@ func _parse(rows: Array) -> Array:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_PAUSED or what == 		_save_game()
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_save_game()
 	elif what == NOTIFICATION_APPLICATION_RESUMED and Api.token != "":
 		refresh_profile()
 
