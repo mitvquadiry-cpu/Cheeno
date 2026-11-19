@@ -24,3 +24,6 @@ Thumbs.db
 digits.zip
 digits/
 .agent/
+
+release-keystore-*.txt
+cheeno-release.p12
