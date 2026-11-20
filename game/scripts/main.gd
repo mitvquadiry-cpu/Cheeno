@@ -231,10 +231,14 @@ func avatar_center() -> Vector2:
 
 
 func panel_rect() -> Rect2:
+	if panel == "profile" or panel == "name":
+		return Rect2(Vector2(40, 230), Vector2(640, 860))
 	return Rect2(Vector2(40, 280), Vector2(640, 720))
 
 
 func close_rect() -> Rect2:
+	if panel == "profile" or panel == "name":
+		return Rect2(Vector2(220, 1010), Vector2(280, 56))
 	return Rect2(Vector2(220, 920), Vector2(280, 56))
 
 
@@ -419,18 +423,18 @@ func _press_panel(p: Vector2) -> void:
 					Save.avatar = i
 					if Api.token != "":
 						Api.set_profile(i)
-			if Api.token != "" and Rect2(Vector2(110, 735), Vector2(500, 64)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 750), Vector2(500, 64)).has_point(p):
 				panel = "name"
 				name_text = ""
 				name_msg = ""
-			if Api.token != "" and Rect2(Vector2(110, 805), Vector2(500, 56)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 834), Vector2(500, 60)).has_point(p):
 				panel = "redeem"
 				login_text = ""
 				login_msg = ""
-			if Api.token != "" and is_admin and Rect2(Vector2(110, 868), Vector2(500, 44)).has_point(p):
+			if Api.token != "" and is_admin and Rect2(Vector2(110, 912), Vector2(500, 60)).has_point(p):
 				panel = "codes"
 				_load_codes()
-			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p):
+			if Rect2(Vector2(110, 650), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
 					_open_login()
 				else:
@@ -456,7 +460,7 @@ func _press_panel(p: Vector2) -> void:
 				name_msg = ""
 		"newcode":
 			_name_pad(p)
-			if Rect2(Vector2(110, 836), Vector2(500, 56)).has_point(p):
+			if Rect2(Vector2(110, 910), Vector2(500, 56)).has_point(p):
 				_create_code()
 
 
@@ -539,7 +543,7 @@ const NAME_KEYS := ["ا","ب","پ","ت","ث","ج","چ","ح","خ","د","ذ","ر",
 
 
 func _name_key_rect(i: int) -> Rect2:
-	return Rect2(45 + (i % 6) * 106, 430 + (i / 6) * 50, 100, 44)
+	return Rect2(45 + (i % 6) * 106, 500 + (i / 6) * 50, 100, 44)
 
 
 func _name_pad(p: Vector2) -> void:
@@ -1070,8 +1074,11 @@ func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 	var hair: Color = [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
 	var dark := Color("#2a1a12")
 	# پس‌زمینه دایره‌ای با حاشیه طلایی
-	draw_circle(c, r + 4, Color("#ffd166"))
-	draw_circle(c, r, bg)
+	draw_circle(c + Vector2(0, 3), r + 6, Color(0, 0, 0, 0.3))
+	draw_circle(c, r + 6, Color("#b8860b"))
+	draw_circle(c, r + 3.5, Color("#ffd166"))
+	draw_circle(c, r, bg.darkened(0.12))
+	draw_circle(c + Vector2(0, -r * 0.2), r * 0.8, bg.lightened(0.08))
 	# بدن (شانه‌ها)
 	draw_colored_polygon(_ellipse(c + Vector2(0, r * 0.95), r * 0.62, r * 0.42), bg.darkened(0.2))
 	# مو پشت سر (برای مدل‌های بلند)
@@ -1110,6 +1117,8 @@ func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 	draw_circle(c + Vector2(r * 0.16, -r * 0.1), r * 0.05, dark)
 	draw_line(c + Vector2(-r * 0.24, -r * 0.2), c + Vector2(-r * 0.08, -r * 0.22), dark, maxf(1.5, r * 0.03))
 	draw_line(c + Vector2(r * 0.08, -r * 0.22), c + Vector2(r * 0.24, -r * 0.2), dark, maxf(1.5, r * 0.03))
+	for sx in [-1.0, 1.0]:
+		draw_circle(c + Vector2(sx * r * 0.16 - r * 0.025, -r * 0.13), r * 0.022, Color.WHITE)
 	# لبخند
 	draw_arc(c + Vector2(0, -r * 0.02), r * 0.17, deg_to_rad(20), deg_to_rad(160), 14, dark, maxf(2.0, r * 0.04))
 	# گونه
@@ -1276,12 +1285,12 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 					draw_arc(c, 42, 0, TAU, 32, Color.WHITE, 4.0)
 			var nm := "مهمان" if Api.token == "" else account_name
 			draw_string(f, Vector2(0, 610), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 28, Color.WHITE)
-			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
+			_btn(Rect2(Vector2(110, 650), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
 			if Api.token != "":
-				_btn(Rect2(Vector2(110, 735), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
-				_btn(Rect2(Vector2(110, 805), Vector2(500, 56)), "کد هدیه", Color("#2a1f55"), 24)
+				_btn(Rect2(Vector2(110, 750), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
+				_btn(Rect2(Vector2(110, 834), Vector2(500, 60)), "کد هدیه", Color("#2a1f55"), 24)
 				if is_admin:
-					_btn(Rect2(Vector2(110, 868), Vector2(500, 44)), "مدیریت کدها", Color("#5a2a55"), 22)
+					_btn(Rect2(Vector2(110, 912), Vector2(500, 60)), "مدیریت کدها", Color("#5a2a55"), 22)
 		"redeem":
 			draw_string(f, Vector2(0, 372), "کد هدیه را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var rr := Rect2(110, 404, 500, 72)
@@ -1311,15 +1320,15 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				_btn(_name_key_rect(i), NAME_KEYS[i], Color("#2a1f55"), 22)
 			_btn(Rect2(Vector2(110, 836), Vector2(500, 56)), "ساخت کد", Color("#3a2a7a"), 26)
 		"name":
-			draw_string(f, Vector2(0, 318), "اسم خودت را بنویس (۲ تا ۱۲ حرف)", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
-			var nr := Rect2(110, 330, 500, 56)
+			draw_string(f, Vector2(0, 372), "اسم خودت را بنویس (۲ تا ۱۲ حرف)", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			var nr := Rect2(110, 396, 500, 56)
 			draw_rect(nr, Color("#f4f0ff"))
 			draw_rect(nr, Color("#ff6ad5"), false, 3.0)
 			draw_string(f, Vector2(nr.position.x, nr.position.y + 38), name_text if name_text != "" else "نام", HORIZONTAL_ALIGNMENT_CENTER, nr.size.x, 30, Color("#140d2b") if name_text != "" else Color("#8a80b8"))
-			draw_string(f, Vector2(0, 408), name_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 20, Color("#ffd166"))
+			draw_string(f, Vector2(0, 476), name_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 20, Color("#ffd166"))
 			for i in NAME_KEYS.size():
 				_btn(_name_key_rect(i), NAME_KEYS[i], Color("#2a1f55"), 22)
-			_btn(Rect2(Vector2(110, 836), Vector2(500, 56)), "ذخیرهٔ نام", Color("#3a2a7a"), 26)
+			_btn(Rect2(Vector2(110, 910), Vector2(500, 56)), "ذخیرهٔ نام", Color("#3a2a7a"), 26)
 		"login":
 			draw_string(f, Vector2(0, 372), "شمارهٔ موبایل (مثل 09123456789)" if not login_sent else "کد پیامک‌شده را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var fr := Rect2(110, 404, 500, 72)
