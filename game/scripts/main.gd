@@ -434,6 +434,8 @@ func _press_panel(p: Vector2) -> void:
 			if Api.token != "" and is_admin and Rect2(Vector2(110, 912), Vector2(500, 60)).has_point(p):
 				panel = "codes"
 				_load_codes()
+			if Api.token != "" and Rect2(Vector2(110, 990), Vector2(500, 60)).has_point(p):
+				_open_chat()
 			if Rect2(Vector2(110, 650), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
 					_open_login()
@@ -474,6 +476,7 @@ func _redeem() -> void:
 		account_balance = int(r.data.get("balance", account_balance))
 		login_msg = "%d سکه گرفتی!" % int(r.data.get("added", 0))
 		login_text = ""
+		refresh_profile()
 	else:
 		login_msg = str(r.data.get("message", "ثبت نشد"))
 	login_busy = false
@@ -662,19 +665,23 @@ func _undo() -> void:
 func _rotate(i: int) -> void:
 	if game_over or hand[i] == null:
 		return
-	if not await _pay_or_free("rotate", ROTATE_COST, "rotate"):
-		_need_coins(ROTATE_COST)
-		return
-	var cells: Array = hand[i].cells
+	var old_cells: Array = hand[i].cells
 	var my := 0
-	for v in cells:
+	for v in old_cells:
 		my = maxi(my, v.y)
 	var out := []
-	for v in cells:
+	for v in old_cells:
 		out.append(Vector2i(my - v.y, v.x))
-	hand[i].cells = out
+	# چرخش فوری؛ پرداخت در پس‌زمینه و در صورت رد شدن برگردانده می‌شود
+	var piece = hand[i]
+	piece.cells = out
 	hint = {}
 	_play("pick")
+	var ok: bool = await _pay_or_free("rotate", ROTATE_COST, "rotate")
+	if not ok:
+		piece.cells = old_cells
+		_need_coins(ROTATE_COST)
+		return
 	if not _any_move_left():
 		game_over = true
 	_save_game()
@@ -1291,6 +1298,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				_btn(Rect2(Vector2(110, 834), Vector2(500, 60)), "کد هدیه", Color("#2a1f55"), 24)
 				if is_admin:
 					_btn(Rect2(Vector2(110, 912), Vector2(500, 60)), "مدیریت کدها", Color("#5a2a55"), 22)
+				_btn(Rect2(Vector2(110, 990), Vector2(500, 60)), "چت خصوصی", Color("#1f5a55"), 24)
 		"redeem":
 			draw_string(f, Vector2(0, 372), "کد هدیه را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var rr := Rect2(110, 404, 500, 72)
@@ -1342,3 +1350,19 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			for i in pad.size():
 				_btn(_pad_rect(i), pad[i], Color("#2a1f55"), 30)
 	_btn(close_rect(), "بستن", Color("#140d2b"), 26)
+
+
+func _open_chat() -> void:
+	if get_node_or_null("ChatLayer") != null:
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "ChatLayer"
+	layer.layer = 50
+	var bg := ColorRect.new()
+	bg.color = Color("#140d2b")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var scr: Control = load("res://scripts/chat_screen.gd").new()
+	layer.add_child(scr)
+	scr.tree_exited.connect(func(): layer.queue_free())
+	add_child(layer)

@@ -94,6 +94,44 @@ func spend(amount: int, reason: String) -> Dictionary:
 	return await _request("spend", HTTPClient.METHOD_POST, {"amount": amount, "reason": reason})
 
 
+# ---------- چت خصوصی ----------
+
+func chat_state() -> Dictionary:
+	return await _request("chat/state", HTTPClient.METHOD_GET)
+
+
+func chat_set_name(name: String) -> Dictionary:
+	return await _request("chat/name", HTTPClient.METHOD_POST, {"name": name})
+
+
+func chat_unlock() -> Dictionary:
+	return await _request("chat/unlock", HTTPClient.METHOD_POST)
+
+
+func chat_search(q: String) -> Dictionary:
+	return await _request("chat/search&q=%s" % q.uri_encode(), HTTPClient.METHOD_GET)
+
+
+func chat_threads() -> Dictionary:
+	return await _request("chat/threads", HTTPClient.METHOD_GET)
+
+
+func chat_messages(with_name: String) -> Dictionary:
+	return await _request("chat/messages&with=%s" % with_name.uri_encode(), HTTPClient.METHOD_GET)
+
+
+func chat_send(to_name: String, text: String) -> Dictionary:
+	return await _request("chat/send", HTTPClient.METHOD_POST, {"to": to_name, "text": text})
+
+
+func chat_block(with_name: String, on: bool) -> Dictionary:
+	return await _request("chat/block", HTTPClient.METHOD_POST, {"with": with_name, "on": on})
+
+
+func chat_report(message_id: int) -> Dictionary:
+	return await _request("chat/report", HTTPClient.METHOD_POST, {"id": message_id})
+
+
 func _request(path: String, method: int, body: Dictionary = {}) -> Dictionary:
 	var http := HTTPRequest.new()
 	add_child(http)
