@@ -199,19 +199,19 @@ func top_btn(i: int) -> Rect2:
 
 
 func hint_rect() -> Rect2:
-	return Rect2(Vector2(40, 1080), Vector2(310, 68))
+	return Rect2(Vector2(40, 1100), Vector2(310, 68))
 
 
 func shuffle_rect() -> Rect2:
-	return Rect2(Vector2(370, 1080), Vector2(310, 68))
+	return Rect2(Vector2(370, 1100), Vector2(310, 68))
 
 
 func undo_rect() -> Rect2:
-	return Rect2(Vector2(40, 1156), Vector2(310, 68))
+	return Rect2(Vector2(40, 1186), Vector2(310, 68))
 
 
 func rotate_rect() -> Rect2:
-	return Rect2(Vector2(370, 1156), Vector2(310, 68))
+	return Rect2(Vector2(370, 1186), Vector2(310, 68))
 
 
 func shop_rect() -> Rect2:
@@ -539,6 +539,7 @@ func _login_step() -> void:
 		login_msg = "در حال بررسی…"
 		var r2: Dictionary = await Api.otp_verify(login_phone, txt)
 		if r2.ok:
+			_reset_guest_progress()
 			await refresh_profile()
 			Api.set_profile(Save.avatar)
 			panel = "profile"
@@ -825,12 +826,24 @@ func refresh_profile() -> void:
 		msg = "حساب شما مسدود شده است"
 
 
+# با ورود، پیشرفت مهمان پاک می‌شود و حساب از صفر شروع می‌کند
+func _reset_guest_progress() -> void:
+	Save.coins = 0
+	Save.best_score = 0
+	Save.line_acc = 0
+	Save.owned = [0]
+	Save.skin = 0
+	Save.free = {"hint": 0, "shuffle": 0, "undo": 0, "rotate": 0}
+	Save.save()
+
+
 func _handle_launch_uri() -> void:
 	for arg in OS.get_cmdline_args():
 		if arg.begins_with("cheeno://auth"):
 			var code := arg.get_slice("code=", 1).get_slice("&", 0).uri_decode()
 			var r: Dictionary = await Api.login(code)
 			if r.ok:
+				_reset_guest_progress()
 				await refresh_profile()
 			return
 		if arg.begins_with("cheeno://paid"):
