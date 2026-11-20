@@ -12,6 +12,8 @@ var owned: Array = [0]
 var avatar := 0
 var line_acc := 0
 var game: Dictionary = {}
+var daily_day := ""
+var free: Dictionary = {"hint": 0, "shuffle": 0, "undo": 0, "rotate": 0}
 
 
 func _ready() -> void:
@@ -26,6 +28,8 @@ func _ready() -> void:
 		avatar = cf.get_value("player", "avatar", 0)
 		line_acc = cf.get_value("player", "line_acc", 0)
 		game = cf.get_value("player", "game", {})
+		daily_day = cf.get_value("player", "daily_day", "")
+		free = cf.get_value("player", "free", free)
 
 
 func get_coins() -> int:
@@ -62,4 +66,6 @@ func save() -> void:
 	cf.set_value("player", "avatar", avatar)
 	cf.set_value("player", "line_acc", line_acc)
 	cf.set_value("player", "game", game)
+	cf.set_value("player", "daily_day", daily_day)
+	cf.set_value("player", "free", free)
 	cf.save(PATH)

@@ -57,6 +57,7 @@ var flashes: Array = []
 var history: Array = []
 var hint := {}
 var msg := ""
+var pressed_pos := Vector2(-1, -1)
 var time := 0.0
 var panel := ""                  # "", skins, sound, profile
 var reset_armed := 0.0
@@ -81,7 +82,8 @@ func _ready() -> void:
 		new_game()
 	_handle_launch_uri()
 	if Api.token != "":
-		refresh_profile()
+		await refresh_profile()
+	_daily_check()
 
 
 func _parse(rows: Array) -> Array:
@@ -197,19 +199,19 @@ func top_btn(i: int) -> Rect2:
 
 
 func hint_rect() -> Rect2:
-	return Rect2(Vector2(60, 1090), Vector2(280, 56))
+	return Rect2(Vector2(40, 1080), Vector2(310, 68))
 
 
 func shuffle_rect() -> Rect2:
-	return Rect2(Vector2(380, 1090), Vector2(280, 56))
+	return Rect2(Vector2(370, 1080), Vector2(310, 68))
 
 
 func undo_rect() -> Rect2:
-	return Rect2(Vector2(60, 1156), Vector2(280, 56))
+	return Rect2(Vector2(40, 1156), Vector2(310, 68))
 
 
 func rotate_rect() -> Rect2:
-	return Rect2(Vector2(380, 1156), Vector2(280, 56))
+	return Rect2(Vector2(370, 1156), Vector2(310, 68))
 
 
 func shop_rect() -> Rect2:
@@ -266,8 +268,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		event.position.y -= top_off
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			pressed_pos = event.position
 			_press(event.position)
 		else:
+			pressed_pos = Vector2(-1, -1)
 			_release(event.position)
 	elif event is InputEventMouseMotion:
 		if drag >= 0:
@@ -567,6 +571,7 @@ func _pay(amount: int, reason: String) -> bool:
 		if not r.ok:
 			return false
 		account_balance = int(r.data.get("balance", account_balance))
+		_apply_free(r.data)
 		return true
 	return Save.spend_coins(amount)
 
@@ -580,7 +585,7 @@ func _undo() -> void:
 	if game_over or history.is_empty():
 		msg = "حرکتی برای برگشت نیست"
 		return
-	if not await _pay(UNDO_COST, "undo"):
+	if not await _pay_or_free("undo", UNDO_COST, "undo"):
 		_need_coins(UNDO_COST)
 		return
 	_restore(history.pop_back())
@@ -591,7 +596,7 @@ func _undo() -> void:
 func _rotate(i: int) -> void:
 	if game_over or hand[i] == null:
 		return
-	if not await _pay(ROTATE_COST, "rotate"):
+	if not await _pay_or_free("rotate", ROTATE_COST, "rotate"):
 		_need_coins(ROTATE_COST)
 		return
 	var cells: Array = hand[i].cells
@@ -687,7 +692,7 @@ func _continue() -> void:
 func _shuffle() -> void:
 	if game_over:
 		return
-	if not await _pay(SHUFFLE_COST, "shuffle"):
+	if not await _pay_or_free("shuffle", SHUFFLE_COST, "shuffle"):
 		_need_coins(SHUFFLE_COST)
 		return
 	hand = _new_hand()
@@ -797,7 +802,7 @@ func _use_hint() -> void:
 	if found.is_empty():
 		msg = "جای قانونی‌ای پیدا نشد"
 		return
-	if not await _pay(HINT_COST, "hint"):
+	if not await _pay_or_free("hint", HINT_COST, "hint"):
 		_need_coins(HINT_COST)
 		return
 	hint = found
@@ -814,6 +819,10 @@ func refresh_profile() -> void:
 			if not Save.owned.has(int(s)):
 				Save.owned.append(int(s))
 		Save.save()
+	elif r.code == 403:
+		Api.logout()
+		account_balance = -1
+		msg = "حساب شما مسدود شده است"
 
 
 func _handle_launch_uri() -> void:
@@ -905,12 +914,61 @@ func _draw_background(vp: Vector2) -> void:
 	draw_circle(Vector2(vp.x * 0.85, 1000), 260, Color(0.42, 0.36, 1, 0.08))
 
 
+func _badge(r: Rect2, key: String) -> void:
+	var f := ThemeDB.fallback_font
+	var c := Vector2(r.position.x + 6, r.position.y + 6)
+	var n: int = int(Save.free.get(key, 0))
+	draw_circle(c, 20, Color("#ffd166") if n > 0 else Color("#4a3f7a"))
+	draw_arc(c, 20, 0, TAU, 32, Color.WHITE, 2.0)
+	draw_string(f, Vector2(c.x - 20, c.y + 9), str(n), HORIZONTAL_ALIGNMENT_CENTER, 40, 26,
+		Color("#140d2b") if n > 0 else Color.WHITE)
+
+
+# با حساب وارد‌شده سرور سهمیهٔ رایگان را حساب می‌کند؛ وگرنه محلی
+func _pay_or_free(key: String, amount: int, reason: String) -> bool:
+	if Api.token != "":
+		return await _pay(amount, reason)
+	if int(Save.free.get(key, 0)) > 0:
+		Save.free[key] = int(Save.free[key]) - 1
+		Save.save()
+		return true
+	return await _pay(amount, reason)
+
+
+func _apply_free(d: Dictionary) -> void:
+	var f = d.get("free", null)
+	if f is Dictionary:
+		for k in ["hint", "shuffle", "undo", "rotate"]:
+			Save.free[k] = int(f.get(k, 0))
+		Save.save()
+
+
+func _daily_check() -> void:
+	if Api.token != "":
+		var r: Dictionary = await Api.daily()
+		if r.ok:
+			_apply_free(r.data)
+			account_balance = int(r.data.get("balance", account_balance))
+			if r.data.get("claimed", false):
+				panel = "daily"
+		return
+	var today := Time.get_date_string_from_system()
+	if Save.daily_day == today:
+		return
+	Save.daily_day = today
+	Save.free = {"hint": 3, "shuffle": 3, "undo": 3, "rotate": 3}
+	Save.coins += 20
+	Save.save()
+	panel = "daily"
+
+
 func _btn(r: Rect2, text: String, fill := Color("#140d2b"), fs := 24, tc := Color.WHITE) -> void:
 	var f := ThemeDB.fallback_font
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = fill
+	var down: bool = pressed_pos.x >= 0 and r.has_point(pressed_pos)
+	sb.bg_color = fill.lightened(0.35) if down else fill
 	sb.set_corner_radius_all(int(minf(r.size.y * 0.3, 22.0)))
-	sb.border_color = Color("#7b5cff")
+	sb.border_color = Color("#ffd166") if down else Color("#7b5cff")
 	sb.set_border_width_all(2)
 	sb.shadow_color = Color(0, 0, 0, 0.35)
 	sb.shadow_size = 6
@@ -1058,9 +1116,13 @@ func _draw() -> void:
 			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
 
 	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
-	_btn(shuffle_rect(), "عوض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
+	_btn(shuffle_rect(), "تعویض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
 	_btn(undo_rect(), "برگشت حرکت: %d سکه" % UNDO_COST, Color("#140d2b"), 24)
 	_btn(rotate_rect(), "چرخش کارت: %d سکه" % ROTATE_COST, Color("#3a2a7a") if rot_mode else Color("#140d2b"), 24)
+	_badge(hint_rect(), "hint")
+	_badge(shuffle_rect(), "shuffle")
+	_badge(undo_rect(), "undo")
+	_badge(rotate_rect(), "rotate")
 	_btn(shop_rect(), "خرید سکه", Color("#3a2a7a"), 22)
 	_btn(records_rect(), "رکوردها", Color("#140d2b"), 22)
 
@@ -1083,11 +1145,16 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	var pr := panel_rect()
 	draw_rect(pr, Color("#1a1036"))
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
-	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها", "name": "تغییر نام"}.get(panel, "")
+	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها", "name": "تغییر نام", "daily": "هدیهٔ امروز"}.get(panel, "")
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
 	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if panel != "login" and panel != "name" else "",
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	match panel:
+		"daily":
+			draw_string(f, Vector2(60, 470), "۲۰ سکه هدیه گرفتی!", HORIZONTAL_ALIGNMENT_CENTER, 600, 32, Color("#ffd166"))
+			draw_string(f, Vector2(60, 560), "امروز از هرکدام ۳ بار رایگان داری:", HORIZONTAL_ALIGNMENT_CENTER, 600, 26, Color.WHITE)
+			draw_string(f, Vector2(60, 620), "راهنما، تعویض کارت‌ها، چرخش کارت، برگشت حرکت", HORIZONTAL_ALIGNMENT_CENTER, 600, 24, Color.WHITE)
+			draw_string(f, Vector2(60, 700), "هر روز ساعت ۰۰:۰۰ دوباره پر می‌شود.", HORIZONTAL_ALIGNMENT_CENTER, 600, 22, Color("#b9a8ff"))
 		"skins":
 			for i in SKINS.size():
 				var r := skin_rect(i)

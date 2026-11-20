@@ -55,7 +55,7 @@ func login(code: String) -> Dictionary:
 
 
 func balance() -> Dictionary:
-	return await _request("balance", HTTPClient.METHOD_GET)
+	return await _request("balance&device=%s&coins=%d" % [device_id().uri_encode(), Save.coins], HTTPClient.METHOD_GET)
 
 
 func submit_score(score: int) -> Dictionary:
@@ -68,6 +68,10 @@ func create_order(pack: String) -> Dictionary:
 
 func submit_lines(lines: int) -> Dictionary:
 	return await _request("lines", HTTPClient.METHOD_POST, {"lines": lines})
+
+
+func daily() -> Dictionary:
+	return await _request("daily", HTTPClient.METHOD_POST)
 
 
 func leaderboard() -> Dictionary:
