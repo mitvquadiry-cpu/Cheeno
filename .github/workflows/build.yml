@@ -70,15 +70,19 @@ jobs:
         run: |
           mkdir -p ../build
           godot --headless --import || true
+          if [ -z "$RELEASE_KS_B64" ] || [ -z "$RELEASE_KS_PASS" ]; then
+            echo "ERROR: secrets RELEASE_KS_B64 / RELEASE_KS_PASS are empty in this run. Refusing to build a debug APK."
+            exit 1
+          fi
           if [ -n "$RELEASE_KS_B64" ]; then
             echo "$RELEASE_KS_B64" | base64 -d > $HOME/release.p12
             export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.p12
             export GODOT_ANDROID_KEYSTORE_RELEASE_USER=cheeno
             export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$RELEASE_KS_PASS"
             godot --headless --verbose --export-release "Android" ../build/cheeno.apk
-          else
-            godot --headless --verbose --export-debug "Android" ../build/cheeno.apk
           fi
+          ls -l ../build/cheeno.apk
+          apksigner verify --print-certs ../build/cheeno.apk | head -3 || true
 
       - uses: actions/upload-artifact@v4
         with:
