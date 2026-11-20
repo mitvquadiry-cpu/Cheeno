@@ -70,6 +70,18 @@ func submit_lines(lines: int) -> Dictionary:
 	return await _request("lines", HTTPClient.METHOD_POST, {"lines": lines})
 
 
+func redeem_code(code: String) -> Dictionary:
+	return await _request("code/redeem", HTTPClient.METHOD_POST, {"code": code})
+
+
+func codes_list() -> Dictionary:
+	return await _request("admin/codes", HTTPClient.METHOD_GET)
+
+
+func codes_create(alias: String) -> Dictionary:
+	return await _request("admin/codes/create", HTTPClient.METHOD_POST, {"alias": alias})
+
+
 func daily() -> Dictionary:
 	return await _request("daily", HTTPClient.METHOD_POST)
 

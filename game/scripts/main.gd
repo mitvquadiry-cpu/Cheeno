@@ -423,6 +423,13 @@ func _press_panel(p: Vector2) -> void:
 				panel = "name"
 				name_text = ""
 				name_msg = ""
+			if Api.token != "" and Rect2(Vector2(110, 805), Vector2(500, 56)).has_point(p):
+				panel = "redeem"
+				login_text = ""
+				login_msg = ""
+			if Api.token != "" and is_admin and Rect2(Vector2(110, 868), Vector2(500, 44)).has_point(p):
+				panel = "codes"
+				_load_codes()
 			if Rect2(Vector2(110, 640), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
 					_open_login()
@@ -438,6 +445,58 @@ func _press_panel(p: Vector2) -> void:
 			_name_pad(p)
 			if Rect2(Vector2(110, 836), Vector2(500, 56)).has_point(p):
 				_name_save()
+		"redeem":
+			_login_pad(p)
+			if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
+				_redeem()
+		"codes":
+			if Rect2(Vector2(110, 850), Vector2(500, 56)).has_point(p):
+				panel = "newcode"
+				name_text = ""
+				name_msg = ""
+		"newcode":
+			_name_pad(p)
+			if Rect2(Vector2(110, 836), Vector2(500, 56)).has_point(p):
+				_create_code()
+
+
+func _redeem() -> void:
+	if login_busy or login_text.length() < 4:
+		return
+	login_busy = true
+	login_msg = "در حال بررسی…"
+	var r: Dictionary = await Api.redeem_code(login_text)
+	if r.ok:
+		account_balance = int(r.data.get("balance", account_balance))
+		login_msg = "%d سکه گرفتی!" % int(r.data.get("added", 0))
+		login_text = ""
+	else:
+		login_msg = str(r.data.get("message", "ثبت نشد"))
+	login_busy = false
+
+
+func _load_codes() -> void:
+	var r: Dictionary = await Api.codes_list()
+	if r.ok:
+		codes_list = r.data.get("codes", [])
+
+
+func _create_code() -> void:
+	if name_busy:
+		return
+	var txt := name_text.strip_edges()
+	if txt.length() < 2:
+		name_msg = "نام مستعار حداقل ۲ حرف"
+		return
+	name_busy = true
+	var r: Dictionary = await Api.codes_create(txt)
+	if r.ok:
+		name_msg = "کد ساخته شد: " + str(r.data.get("code", ""))
+		name_text = ""
+		_load_codes()
+	else:
+		name_msg = str(r.data.get("message", "ساخته نشد"))
+	name_busy = false
 
 
 var login_sent := false
@@ -471,6 +530,8 @@ func _login_pad(p: Vector2) -> void:
 				login_text += k
 
 
+var is_admin := false
+var codes_list: Array = []
 var name_text := ""
 var name_msg := ""
 var name_busy := false
@@ -815,6 +876,7 @@ func refresh_profile() -> void:
 	if r.ok:
 		account_balance = int(r.data.get("balance", 0))
 		account_name = str(r.data.get("name", ""))
+		is_admin = bool(r.data.get("is_admin", false))
 		account_best = int(r.data.get("best", 0))
 		for s in r.data.get("skins", []):
 			if not Save.owned.has(int(s)):
@@ -823,6 +885,7 @@ func refresh_profile() -> void:
 	elif r.code == 403:
 		Api.logout()
 		account_balance = -1
+		is_admin = false
 		msg = "حساب شما مسدود شده است"
 
 
@@ -1158,9 +1221,9 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 	var pr := panel_rect()
 	draw_rect(pr, Color("#1a1036"))
 	draw_rect(pr, Color("#4b3a8a"), false, 3.0)
-	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها", "name": "تغییر نام", "daily": "هدیهٔ امروز"}.get(panel, "")
+	var title: String = {"skins": "پوسته‌ها", "sound": "صدا", "profile": "پروفایل", "login": "ورود", "shop": "خرید سکه", "records": "رکوردها", "name": "تغییر نام", "redeem": "کد هدیه", "codes": "کدهای هدیه", "newcode": "کد جدید", "daily": "هدیهٔ امروز"}.get(panel, "")
 	draw_string(f, Vector2(0, 330), title, HORIZONTAL_ALIGNMENT_CENTER, 720, 40, Color.WHITE)
-	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if panel != "login" and panel != "name" else "",
+	draw_string(f, Vector2(0, 370 if panel != "skins" else 1000), "سکه: %d" % _coins() if not panel in ["login", "name", "redeem", "newcode"] else "",
 		HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	match panel:
 		"daily":
@@ -1216,6 +1279,37 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			_btn(Rect2(Vector2(110, 640), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
 			if Api.token != "":
 				_btn(Rect2(Vector2(110, 735), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
+				_btn(Rect2(Vector2(110, 805), Vector2(500, 56)), "کد هدیه", Color("#2a1f55"), 24)
+				if is_admin:
+					_btn(Rect2(Vector2(110, 868), Vector2(500, 44)), "مدیریت کدها", Color("#5a2a55"), 22)
+		"redeem":
+			draw_string(f, Vector2(0, 372), "کد هدیه را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			var rr := Rect2(110, 404, 500, 72)
+			draw_rect(rr, Color("#f4f0ff"))
+			draw_rect(rr, Color("#ff6ad5"), false, 3.0)
+			draw_string(f, Vector2(rr.position.x, rr.position.y + 48), login_text if login_text != "" else "--------", HORIZONTAL_ALIGNMENT_CENTER, rr.size.x, 36, Color("#140d2b"))
+			_btn(Rect2(Vector2(110, 500), Vector2(500, 64)), "ثبت کد", Color("#3a2a7a"), 26)
+			draw_string(f, Vector2(0, 596), login_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#ffd166"))
+			var rpad := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "حذف", "0", "پاک"]
+			for i in rpad.size():
+				_btn(_pad_rect(i), rpad[i], Color("#2a1f55"), 30)
+		"codes":
+			for i in mini(codes_list.size(), 8):
+				var c: Dictionary = codes_list[i]
+				var y := 410.0 + i * 54
+				draw_string(f, Vector2(70, y), "%s  %s" % [str(c.get("alias", "")), str(c.get("code", ""))], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
+				draw_string(f, Vector2(70, y + 26), "%d نفر  |  خرید کل: %d سکه" % [int(c.get("count", 0)), int(c.get("total", 0))], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("#d9d0ff"))
+			_btn(Rect2(Vector2(110, 850), Vector2(500, 56)), "ساخت کد جدید", Color("#3a2a7a"), 26)
+		"newcode":
+			draw_string(f, Vector2(0, 318), "نام مستعار کد را بنویس", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+			var cr := Rect2(110, 330, 500, 56)
+			draw_rect(cr, Color("#f4f0ff"))
+			draw_rect(cr, Color("#ff6ad5"), false, 3.0)
+			draw_string(f, Vector2(cr.position.x, cr.position.y + 38), name_text if name_text != "" else "نام مستعار", HORIZONTAL_ALIGNMENT_CENTER, cr.size.x, 30, Color("#140d2b") if name_text != "" else Color("#8a80b8"))
+			draw_string(f, Vector2(0, 408), name_msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#ffd166"))
+			for i in NAME_KEYS.size():
+				_btn(_name_key_rect(i), NAME_KEYS[i], Color("#2a1f55"), 22)
+			_btn(Rect2(Vector2(110, 836), Vector2(500, 56)), "ساخت کد", Color("#3a2a7a"), 26)
 		"name":
 			draw_string(f, Vector2(0, 318), "اسم خودت را بنویس (۲ تا ۱۲ حرف)", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var nr := Rect2(110, 330, 500, 56)
