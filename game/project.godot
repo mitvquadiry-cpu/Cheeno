@@ -32,3 +32,7 @@ pointing/emulate_mouse_from_touch=true
 [rendering]
 
 textures/vram_compression/import_etc2_astc=true
+
+[audio]
+
+driver/enable_input=true
