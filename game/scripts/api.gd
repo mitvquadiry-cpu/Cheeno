@@ -189,3 +189,7 @@ func soc_call(action: String, data: Dictionary = {}) -> Dictionary:
 
 func chat_unread() -> Dictionary:
 	return await _request("chat/unread", HTTPClient.METHOD_GET)
+
+
+func admin_grant(target: String, amount: int, note: String) -> Dictionary:
+	return await _request("admin/grant", HTTPClient.METHOD_POST, {"target": target, "amount": amount, "note": note})

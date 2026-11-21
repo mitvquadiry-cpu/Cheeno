@@ -508,7 +508,9 @@ func _press_panel(p: Vector2) -> void:
 			if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
 				_redeem()
 		"codes":
-			if Rect2(Vector2(110, 850), Vector2(500, 56)).has_point(p):
+			if Rect2(Vector2(110, 780), Vector2(500, 56)).has_point(p):
+				_open_grant()
+			elif Rect2(Vector2(110, 850), Vector2(500, 56)).has_point(p):
 				panel = "newcode"
 				name_text = ""
 				name_msg = ""
@@ -532,6 +534,61 @@ func _redeem() -> void:
 	else:
 		login_msg = str(r.data.get("message", "ثبت نشد"))
 	login_busy = false
+
+
+func _open_grant() -> void:
+	if get_node_or_null("GrantLayer") != null:
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "GrantLayer"
+	layer.layer = 60
+	var bg := ColorRect.new()
+	bg.color = Color("#140d2b")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var box := VBoxContainer.new()
+	box.position = Vector2(60, 200)
+	box.custom_minimum_size = Vector2(600, 0)
+	box.add_theme_constant_override("separation", 18)
+	layer.add_child(box)
+	var t := Label.new()
+	t.text = "اهدای سکه (ثبت روی سرور)"
+	t.add_theme_font_size_override("font_size", 34)
+	box.add_child(t)
+	var f1 := LineEdit.new()
+	f1.placeholder_text = "نام یا شناسه کاربر"
+	var f2 := LineEdit.new()
+	f2.placeholder_text = "مقدار سکه"
+	var f3 := LineEdit.new()
+	f3.placeholder_text = "توضیح (اختیاری)"
+	for e in [f1, f2, f3]:
+		e.custom_minimum_size = Vector2(600, 80)
+		e.add_theme_font_size_override("font_size", 30)
+		box.add_child(e)
+	var msg := Label.new()
+	msg.add_theme_font_size_override("font_size", 26)
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(msg)
+	var ok := Button.new()
+	ok.text = "ثبت و اهدا"
+	ok.custom_minimum_size = Vector2(600, 80)
+	ok.pressed.connect(func():
+		ok.disabled = true
+		msg.text = "..."
+		var r: Dictionary = await Api.admin_grant(f1.text.strip_edges(), int(f2.text), f3.text)
+		ok.disabled = false
+		if r.ok:
+			msg.text = "انجام شد: %s  %d سکه  (موجودی: %d)" % [str(r.data.get("user", "")), int(r.data.get("amount", 0)), int(r.data.get("balance", 0))]
+		else:
+			msg.text = str(r.data.get("message", "انجام نشد"))
+	)
+	box.add_child(ok)
+	var cl := Button.new()
+	cl.text = "بستن"
+	cl.custom_minimum_size = Vector2(600, 80)
+	cl.pressed.connect(func(): layer.queue_free())
+	box.add_child(cl)
+	add_child(layer)
 
 
 func _load_codes() -> void:
@@ -1111,6 +1168,11 @@ func _poll_unread() -> void:
 	unread_busy = true
 	var r: Dictionary = await Api.chat_unread()
 	unread_busy = false
+	if get_node_or_null("ChatLayer") == null:
+		var ic: Dictionary = await Api.soc_call("incoming")
+		if ic.ok and ic.data.get("call", null) != null:
+			_play("pick")
+			_open_chat()
 	if not r.ok:
 		return
 	var c := int(r.data.get("count", 0))
@@ -1563,6 +1625,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				var y := 410.0 + i * 54
 				draw_string(f, Vector2(70, y), "%s  %s" % [str(c.get("alias", "")), str(c.get("code", ""))], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
 				draw_string(f, Vector2(70, y + 26), "%d نفر  |  خرید کل: %d سکه" % [int(c.get("count", 0)), int(c.get("total", 0))], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("#d9d0ff"))
+			_btn(Rect2(Vector2(110, 780), Vector2(500, 56)), "اهدای سکه به کاربر", Color("#1f8a55"), 26)
 			_btn(Rect2(Vector2(110, 850), Vector2(500, 56)), "ساخت کد جدید", Color("#3a2a7a"), 26)
 		"newcode":
 			draw_string(f, Vector2(0, 318), "نام مستعار کد را بنویس", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
