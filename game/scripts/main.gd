@@ -1379,7 +1379,7 @@ func _draw() -> void:
 	_btn(records_rect(), "رکوردها", Color("#140d2b"), 22)
 
 	if msg != "":
-		draw_string(f, Vector2(0, 1252), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
+		draw_string(f, Vector2(0, 1278), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#d9d0ff"))
 
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.75))

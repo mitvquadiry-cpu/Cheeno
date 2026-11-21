@@ -20,6 +20,10 @@ func _ready() -> void:
 	position = Vector2.ZERO
 	size = vs
 	custom_minimum_size = vs
+	var bg := ColorRect.new()
+	bg.color = Color("#140d2b")
+	bg.size = vs
+	add_child(bg)
 	root = VBoxContainer.new()
 	root.position = Vector2(20, 20)
 	root.size = vs - Vector2(40, 40)
@@ -29,7 +33,8 @@ func _ready() -> void:
 	var top := HBoxContainer.new()
 	root.add_child(top)
 	var back := Button.new()
-	back.text = "بازگشت"
+	back.text = "‹ بازگشت"
+	_sbtn(back, Color("#3a2a7a"))
 	back.pressed.connect(func(): queue_free())
 	top.add_child(back)
 	var title := Label.new()
@@ -37,9 +42,11 @@ func _ready() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Color("#ffd166"))
 	top.add_child(title)
 
 	status = Label.new()
+	status.add_theme_color_override("font_color", Color("#ffd166"))
 	root.add_child(status)
 
 	var scroll := ScrollContainer.new()
@@ -78,6 +85,55 @@ func _label(t: String, fs := 24) -> Label:
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.add_theme_font_size_override("font_size", fs)
 	return l
+
+
+func _sbtn(b: Button, col := Color("#5b3fd6")) -> void:
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = col.lightened(0.15) if st == "hover" else (col.darkened(0.25) if st in ["pressed", "disabled"] else col)
+		sb.set_corner_radius_all(16)
+		sb.set_content_margin_all(12)
+		b.add_theme_stylebox_override(st, sb)
+	b.add_theme_font_size_override("font_size", 24)
+	b.custom_minimum_size.y = 64
+
+
+func _sinput(e: LineEdit) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#2a1f55")
+	sb.set_corner_radius_all(16)
+	sb.set_border_width_all(2)
+	sb.border_color = Color("#7b5cff")
+	sb.set_content_margin_all(14)
+	e.add_theme_stylebox_override("normal", sb)
+	e.add_theme_stylebox_override("focus", sb)
+	e.add_theme_font_size_override("font_size", 24)
+	e.custom_minimum_size = Vector2(0, 64)
+
+
+func _avatar_circle(name_: String, sz := 56) -> Control:
+	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	var h := float(abs(name_.hash()) % 360) / 360.0
+	sb.bg_color = Color.from_hsv(h, 0.55, 0.85)
+	sb.set_corner_radius_all(sz / 2)
+	p.add_theme_stylebox_override("panel", sb)
+	p.custom_minimum_size = Vector2(sz, sz)
+	var l := Label.new()
+	l.text = name_.substr(0, 1)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.add_theme_font_size_override("font_size", 28)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	p.add_child(l)
+	return p
+
+
+func _empty_note(parent: Control, t: String) -> void:
+	var l := _label(t, 22)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.modulate = Color("#b9a8ff")
+	parent.add_child(l)
 
 
 func _set_status(t: String) -> void:
@@ -167,13 +223,18 @@ func _show_threads() -> void:
 	var search_row := HBoxContainer.new()
 	content.add_child(search_row)
 	var input := LineEdit.new()
-	input.placeholder_text = "جست‌وجوی نام..."
+	input.placeholder_text = "🔍 نام بازیکن را بنویس..."
+	_sinput(input)
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	search_row.add_child(input)
 	var go := Button.new()
 	go.text = "جست‌وجو"
+	_sbtn(go, Color("#ffb300"))
+	go.add_theme_color_override("font_color", Color("#2a1f55"))
 	search_row.add_child(go)
-	input.custom_minimum_size = Vector2(0, 64)
+	var hdr := _label("گفتگوهای تو", 24)
+	hdr.modulate = Color("#b9a8ff")
+	content.add_child(hdr)
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 10)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -183,7 +244,10 @@ func _show_threads() -> void:
 
 	var r: Dictionary = await Api.chat_threads()
 	if r.ok:
-		for it in r.data.get("items", []):
+		var its: Array = r.data.get("items", [])
+		if its.is_empty():
+			_empty_note(list, "هنوز گفتگویی نداری 💬\nبالا نام یک بازیکن را جست‌وجو کن و شروع کن.")
+		for it in its:
 			_add_partner_button(list, str(it.get("name", "")))
 
 
@@ -200,20 +264,27 @@ func _search(q: String, list: VBoxContainer) -> void:
 	_set_status("")
 	var items: Array = r.data.get("items", [])
 	if items.is_empty():
-		var l := Label.new()
-		l.text = "کسی با این نام پیدا نشد."
-		list.add_child(l)
+		_empty_note(list, "کسی با این نام پیدا نشد 😕\nنام را همان‌طور که در بازی ثبت شده بنویس.")
 	for it in items:
 		_add_partner_button(list, str(it.get("name", "")))
 
 
 func _add_partner_button(list: VBoxContainer, partner: String) -> void:
-	var b := Button.new()
-	b.text = "💬  " + partner
-	b.custom_minimum_size = Vector2(0, 70)
-	b.add_theme_font_size_override("font_size", 26)
-	b.pressed.connect(func(): _open_thread(partner))
-	list.add_child(b)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.add_child(_avatar_circle(partner))
+	var n := _label(partner, 28)
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(n)
+	var arrow := _label("💬", 28)
+	arrow.size_flags_horizontal = Control.SIZE_SHRINK_END
+	row.add_child(arrow)
+	var card := _card(list, row)
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.gui_input.connect(func(ev: InputEvent):
+		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
+			_open_thread(partner)
+	)
 
 
 func _open_thread(partner: String) -> void:
@@ -222,11 +293,20 @@ func _open_thread(partner: String) -> void:
 	var top := HBoxContainer.new()
 	content.add_child(top)
 	var back := Button.new()
-	back.text = "لیست گفتگوها"
+	back.text = "‹ گفتگوها"
+	_sbtn(back, Color("#3a2a7a"))
 	back.pressed.connect(func(): _show_threads())
 	top.add_child(back)
+	var who := HBoxContainer.new()
+	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.alignment = BoxContainer.ALIGNMENT_CENTER
+	who.add_theme_constant_override("separation", 10)
+	who.add_child(_avatar_circle(partner, 44))
+	who.add_child(_label(partner, 26))
+	top.add_child(who)
 	var block := Button.new()
 	block.text = "بلاک"
+	_sbtn(block, Color("#a83255"))
 	top.add_child(block)
 	block.pressed.connect(func(): _toggle_block(block))
 
@@ -241,11 +321,12 @@ func _open_thread(partner: String) -> void:
 	var input := LineEdit.new()
 	input.max_length = MSG_MAX
 	input.placeholder_text = "پیام (حداکثر ۲۰۰ حرف، ۲ سکه)"
-	input.custom_minimum_size = Vector2(0, 64)
+	_sinput(input)
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(input)
 	var send := Button.new()
-	send.text = "ارسال"
+	send.text = "ارسال ➤"
+	_sbtn(send, Color("#2fbf71"))
 	row.add_child(send)
 	send.pressed.connect(func(): _send(input, send))
 	input.text_submitted.connect(func(_t): _send(input, send))
@@ -260,21 +341,31 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		return
 	for c in msgs.get_children():
 		c.queue_free()
-	for m in r.data.get("items", []):
+	var items: Array = r.data.get("items", [])
+	if items.is_empty():
+		_empty_note(msgs, "هنوز پیامی نیست. اولین پیام را بفرست 👋")
+	for m in items:
 		var mine: bool = m.get("mine", false)
-		var l := _label("%s: %s" % ["تو" if mine else current_with, str(m.get("text", ""))], 22)
-		var row := HBoxContainer.new()
-		row.add_child(l)
+		var txt := str(m.get("text", ""))
+		var l := _label(txt, 24)
+		l.custom_minimum_size.x = mini(80 + txt.length() * 16, 440)
+		var box := HBoxContainer.new()
+		box.add_child(l)
+		var mid := int(m.get("id", 0))
 		if not mine:
 			var rep := Button.new()
-			rep.text = "گزارش"
-			var mid := int(m.get("id", 0))
+			rep.text = "⚑"
+			rep.flat = true
 			rep.pressed.connect(func():
 				var rr: Dictionary = await Api.chat_report(mid)
 				_set_status("گزارش ثبت شد." if rr.ok else _err(rr, "گزارش انجام نشد."))
 			)
-			row.add_child(rep)
-		_card(msgs, row, Color("#3b2a7a") if mine else Color("#2a1f55"))
+			box.add_child(rep)
+		var wrap := HBoxContainer.new()
+		wrap.alignment = BoxContainer.ALIGNMENT_END if mine else BoxContainer.ALIGNMENT_BEGIN
+		msgs.add_child(wrap)
+		var bub := _card(wrap, box, Color("#4a35a8") if mine else Color("#2a1f55"))
+		bub.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_SHRINK_BEGIN
 
 
 func _send(input: LineEdit, btn: Button) -> void:
