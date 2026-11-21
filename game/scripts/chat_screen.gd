@@ -26,8 +26,8 @@ func _ready() -> void:
 	add_child(bg)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	root = VBoxContainer.new()
-	root.position = Vector2(20, 20)
-	root.size = vs - Vector2(40, 40)
+	root.position = Vector2(20, 90)
+	root.size = vs - Vector2(40, 110)
 	root.add_theme_constant_override("separation", 14)
 	add_child(root)
 
@@ -296,27 +296,32 @@ func _add_partner_button(list: VBoxContainer, partner: String, searched := false
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.add_child(_avatar_circle(partner))
-	var n := _label(partner, 28)
-	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var n := Button.new()
+	n.text = partner
+	n.flat = true
+	n.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	n.focus_mode = Control.FOCUS_NONE
+	n.add_theme_font_size_override("font_size", 28)
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	n.custom_minimum_size.y = 64
+	n.pressed.connect(func(): _open_thread.call_deferred(partner))
 	row.add_child(n)
 	if searched:
 		var ab := Button.new()
 		ab.text = "افزودن دوست"
 		_sbtn(ab, Color("#1f8a55"))
 		ab.pressed.connect(func():
+			ab.disabled = true
 			var rr: Dictionary = await Api.soc_add(partner)
-			_set_status("به دوستان اضافه شد." if rr.ok else _err(rr, "اضافه نشد."))
 			if rr.ok:
 				_show_threads()
+				_set_status("به دوستان اضافه شد.")
+			else:
+				ab.disabled = false
+				_set_status(_err(rr, "اضافه نشد."))
 		)
 		row.add_child(ab)
-	var card := _card(list, row)
-	var hit := Button.new()
-	hit.flat = true
-	hit.focus_mode = Control.FOCUS_NONE
-	hit.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hit.pressed.connect(func(): _open_thread.call_deferred(partner))
-	card.add_child(hit)
+	_card(list, row)
 
 
 func _open_thread(partner: String) -> void:
@@ -354,6 +359,22 @@ func _open_thread(partner: String) -> void:
 			_set_status(_err(rr, "پاک نشد."))
 	)
 	top.add_child(clr)
+	var acts := HBoxContainer.new()
+	acts.add_theme_constant_override("separation", 8)
+	content.add_child(acts)
+	var gb := Button.new()
+	gb.text = "هدیه سکه"
+	_sbtn(gb, Color("#ffb300"))
+	gb.add_theme_color_override("font_color", Color("#2a1f55"))
+	gb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gb.pressed.connect(func(): _gift_dialog.call_deferred(partner))
+	acts.add_child(gb)
+	var cb := Button.new()
+	cb.text = "مکالمه صوتی"
+	_sbtn(cb, Color("#1f8a55"))
+	cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cb.pressed.connect(func(): _call_start.call_deferred(partner))
+	acts.add_child(cb)
 
 	var msgs := VBoxContainer.new()
 	msgs.name = "Msgs"
