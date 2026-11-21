@@ -196,3 +196,7 @@ func chat_unread() -> Dictionary:
 
 func admin_grant(target: String, amount: int, note: String) -> Dictionary:
 	return await _request("admin/grant", HTTPClient.METHOD_POST, {"target": target, "amount": amount, "note": note})
+
+
+func upload_photo(jpg: PackedByteArray) -> Dictionary:
+	return await _request("photo", HTTPClient.METHOD_POST, {"image": Marshalls.raw_to_base64(jpg)})

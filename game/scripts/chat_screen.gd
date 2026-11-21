@@ -677,6 +677,7 @@ func _call_start(nm: String) -> void:
 		_set_status(_err(r2, "تماس برقرار نشد."))
 		return
 	call_id = int(r2.data.get("id", 0))
+	_audio_start(true)
 	_call_ui("در حال زنگ زدن به " + nm + "...", false)
 	_call_loop(true)
 
@@ -690,6 +691,7 @@ func _call_ui(t: String, incoming: bool) -> void:
 		ac.pressed.connect(func():
 			var r: Dictionary = await Api.soc_call("accept", {"id": call_id})
 			if r.ok:
+				_audio_start(false)
 				_call_ui("تماس برقرار است", false)
 				_call_loop(false)
 			else:
@@ -701,13 +703,11 @@ func _call_ui(t: String, incoming: bool) -> void:
 	_sbtn(en, Color("#a83255"))
 	en.pressed.connect(func():
 		call_active = false
+		_audio_stop()
 		await Api.soc_call("end", {"id": call_id})
 		_close_popup()
 	)
 	v.add_child(en)
-	var note := _label("توجه: فعلاً فقط وضعیت و هزینه‌ی تماس فعال است؛ انتقال صدا در نسخه‌ی بعد.", 18)
-	note.modulate = Color("#b9a8ff")
-	v.add_child(note)
 
 
 func _call_loop(is_caller: bool) -> void:
@@ -719,6 +719,7 @@ func _call_loop(is_caller: bool) -> void:
 		var r: Dictionary = await Api.soc_call("tick" if is_caller else "poll", {"id": call_id})
 		if r.ok and r.data.get("state", "") == "ended":
 			call_active = false
+			_audio_stop()
 			_close_popup()
 			_set_status("تماس تمام شد.")
 
@@ -732,3 +733,22 @@ func _poll_incoming() -> void:
 		if r.ok and r.data.get("call", null) != null:
 			call_id = int(r.data.call.id)
 			_call_ui("تماس از " + str(r.data.call.from), true)
+
+
+var audio: Node
+
+
+func _audio_start(caller: bool) -> void:
+	_audio_stop()
+	audio = load("res://scripts/call_audio.gd").new()
+	add_child(audio)
+	if not audio.start(call_id, caller):
+		_set_status("مکالمه‌ی صوتی روی این دستگاه پشتیبانی نمی‌شود.")
+		audio.queue_free()
+		audio = null
+
+
+func _audio_stop() -> void:
+	if audio and is_instance_valid(audio):
+		audio.stop()
+	audio = null

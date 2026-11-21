@@ -523,6 +523,8 @@ func _press_panel(p: Vector2) -> void:
 					Save.avatar = i
 					if Api.token != "":
 						Api.set_profile(i)
+			if Api.token != "" and Rect2(Vector2(110, 660), Vector2(500, 64)).has_point(p):
+				_pick_photo()
 			if Api.token != "" and Rect2(Vector2(110, 750), Vector2(500, 64)).has_point(p):
 				panel = "name"
 				name_text = ""
@@ -1537,7 +1539,7 @@ func _draw() -> void:
 	var nm := "مهمان (لمس کن)" if Api.token == "" else account_name
 	draw_string(f, Vector2(0, 195), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	var col := Color("#d9d0ff")
-	draw_string(f, Vector2(95, 232), "رکورد: %d" % maxi(Save.best_score, account_best), HORIZONTAL_ALIGNMENT_LEFT, 240, 26, col)
+	draw_string(f, Vector2(140, 232), "رکورد: %d" % maxi(Save.best_score, account_best), HORIZONTAL_ALIGNMENT_LEFT, 240, 26, col)
 	draw_string(f, Vector2(0, 232), "سکه: %d" % _coins(), HORIZONTAL_ALIGNMENT_CENTER, 720, 26, col)
 	draw_string(f, Vector2(420, 232), "امتیاز: %d" % score, HORIZONTAL_ALIGNMENT_RIGHT, 240, 26, col)
 
@@ -1684,6 +1686,9 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			draw_circle(Vector2(s.position.x + s.size.x * Save.volume, s.position.y + 20), 24, Color.WHITE)
 		"profile":
 			_draw_avatar(Vector2(360, 440), 50)
+			if Api.token != "":
+				draw_rect(Rect2(Vector2(110, 660), Vector2(500, 64)), Color("#1f8a55"), true)
+				draw_string(f, Vector2(110, 703), "عکس پروفایل (۵۰۰ سکه)", HORIZONTAL_ALIGNMENT_CENTER, 500, 26, Color.WHITE)
 			draw_string(f, Vector2(0, 540 - 70), "", HORIZONTAL_ALIGNMENT_CENTER, 720, 10)
 			for i in AVATARS.size():
 				var c := Vector2(110 + i * 95, 540)
@@ -1768,3 +1773,35 @@ func _open_chat() -> void:
 	layer.add_child(scr)
 	scr.tree_exited.connect(func(): layer.queue_free())
 	add_child(layer)
+
+
+func _pick_photo() -> void:
+	if OS.get_name() == "Android":
+		OS.request_permissions()
+	var fd := FileDialog.new()
+	fd.access = FileDialog.ACCESS_FILESYSTEM
+	fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	fd.filters = PackedStringArray(["*.jpg, *.jpeg, *.png ; Images"])
+	fd.use_native_dialog = false
+	fd.current_dir = "/storage/emulated/0/DCIM" if OS.get_name() == "Android" else OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
+	fd.size = Vector2i(680, 900)
+	fd.file_selected.connect(_photo_chosen)
+	fd.canceled.connect(fd.queue_free)
+	add_child(fd)
+	fd.popup_centered()
+
+
+func _photo_chosen(path: String) -> void:
+	var img := Image.load_from_file(path)
+	if img == null or img.is_empty():
+		return
+	var m := maxi(img.get_width(), img.get_height())
+	if m > 512:
+		var k := 512.0 / m
+		img.resize(int(img.get_width() * k), int(img.get_height() * k))
+	var jpg := img.save_jpg_to_buffer(0.85)
+	var r: Dictionary = await Api.upload_photo(jpg)
+	if r.ok:
+		account_balance = int(r.data.get("balance", account_balance))
+	elif r.code == 402:
+		_need_coins(500)
