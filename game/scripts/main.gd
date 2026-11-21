@@ -77,6 +77,8 @@ var account_balance := -1
 var top_off := 0.0
 var snd := {}
 var rot_mode := false
+var boom_mode := false
+const BOOM_COST := 50
 var records: Array = []
 var records_state := ""
 
@@ -218,6 +220,51 @@ func hint_rect() -> Rect2:
 
 func shuffle_rect() -> Rect2:
 	return Rect2(Vector2(370, 1100), Vector2(310, 68))
+
+
+func boom_rect() -> Rect2:
+	return Rect2(Vector2(260, 160), Vector2(200, 56))
+
+
+func _board_hit(p: Vector2) -> Vector2i:
+	var l := (p - board_origin) / cell
+	var c := floori(l.x)
+	var r := floori(l.y)
+	if c < 0 or r < 0 or c >= n or r >= n:
+		return Vector2i(-1, -1)
+	return Vector2i(c, r)
+
+
+func _explode(c: int, r: int) -> void:
+	if game_over:
+		return
+	if Api.token == "":
+		msg = "برای انفجار باید وارد حساب شوی"
+		return
+	if not await _pay(BOOM_COST, "boom"):
+		_need_coins(BOOM_COST)
+		return
+	var cleared := 0
+	for dr in range(-1, 2):
+		for dc in range(-1, 2):
+			var cc := c + dc
+			var rr := r + dr
+			if cc < 0 or rr < 0 or cc >= n or rr >= n:
+				continue
+			var idx := rr * n + cc
+			if board[idx] != 0:
+				flashes.append({
+					"pos": cell_pos(cc, rr) + Vector2(cell / 2, cell / 2),
+					"color": _col(board[idx] - 1),
+					"fx": Save.fx,
+					"t": 0.0,
+				})
+				board[idx] = 0
+				cleared += 1
+	history.clear()
+	msg = "انفجار: %d خانه پاک شد" % cleared
+	_play("clear")
+	_save_game()
 
 
 func undo_rect() -> Rect2:
@@ -387,6 +434,17 @@ func _press(p: Vector2) -> void:
 		return
 	if shuffle_rect().has_point(p):
 		_shuffle()
+		return
+	if boom_rect().has_point(p):
+		boom_mode = not boom_mode
+		rot_mode = false
+		msg = "خانه‌ای از تخته را لمس کن تا منفجر شود (%d سکه)" % BOOM_COST if boom_mode else ""
+		_play("click")
+		return
+	if boom_mode and _board_hit(p) != Vector2i(-1, -1):
+		var bc := _board_hit(p)
+		boom_mode = false
+		_explode(bc.x, bc.y)
 		return
 	msg = ""
 	hint = {}
@@ -1160,6 +1218,7 @@ func _make_sounds() -> void:
 var unread_count := 0
 var unread_last := -1
 var unread_busy := false
+var ring_seen := -1
 
 
 func _poll_unread() -> void:
@@ -1170,7 +1229,9 @@ func _poll_unread() -> void:
 	unread_busy = false
 	if get_node_or_null("ChatLayer") == null:
 		var ic: Dictionary = await Api.soc_call("incoming")
-		if ic.ok and ic.data.get("call", null) != null:
+		var cl = ic.data.get("call", null) if ic.ok else null
+		if cl is Dictionary and int(cl.get("id", 0)) != ring_seen:
+			ring_seen = int(cl.get("id", 0))
 			_play("pick")
 			_open_chat()
 	if not r.ok:
@@ -1505,6 +1566,7 @@ func _draw() -> void:
 	_badge(shuffle_rect(), "shuffle")
 	_badge(undo_rect(), "undo")
 	_badge(rotate_rect(), "rotate")
+	_btn(boom_rect(), "انفجار: %d سکه" % BOOM_COST, Color("#7a2a3a") if boom_mode else Color("#140d2b"), 22)
 	_btn(shop_rect(), "خرید سکه", Color("#3a2a7a"), 22)
 	_btn(records_rect(), "رکوردها", Color("#140d2b"), 22)
 
