@@ -157,3 +157,7 @@ func _request(path: String, method: int, body: Dictionary = {}) -> Dictionary:
 	var parsed = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8())
 	var data: Dictionary = parsed if parsed is Dictionary else {}
 	return {"ok": code >= 200 and code < 300, "code": code, "data": data}
+
+
+func chat_clear(with_name: String = "") -> Dictionary:
+	return await _request("chat/clear", HTTPClient.METHOD_POST, {"with": with_name})

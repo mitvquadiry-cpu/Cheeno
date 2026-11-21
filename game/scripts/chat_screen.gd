@@ -235,7 +235,21 @@ func _show_threads() -> void:
 	search_row.add_child(go)
 	var hdr := _label("گفتگوهای تو", 24)
 	hdr.modulate = Color("#b9a8ff")
-	content.add_child(hdr)
+	var clr_all := Button.new()
+	clr_all.text = "🗑 پاک کردن همه"
+	_sbtn(clr_all, Color("#a83255"))
+	clr_all.pressed.connect(func():
+		var rr: Dictionary = await Api.chat_clear("")
+		if rr.ok:
+			_show_threads()
+		else:
+			_set_status(_err(rr, "پاک نشد."))
+	)
+	var hrow := HBoxContainer.new()
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hrow.add_child(hdr)
+	hrow.add_child(clr_all)
+	content.add_child(hrow)
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 10)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -310,6 +324,17 @@ func _open_thread(partner: String) -> void:
 	_sbtn(block, Color("#a83255"))
 	top.add_child(block)
 	block.pressed.connect(func(): _toggle_block(block))
+	var clr := Button.new()
+	clr.text = "🗑"
+	_sbtn(clr, Color("#6b5a9e"))
+	clr.pressed.connect(func():
+		var rr: Dictionary = await Api.chat_clear(partner)
+		if rr.ok:
+			_show_threads()
+		else:
+			_set_status(_err(rr, "پاک نشد."))
+	)
+	top.add_child(clr)
 
 	var msgs := VBoxContainer.new()
 	msgs.name = "Msgs"
