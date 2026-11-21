@@ -23,7 +23,8 @@ func start(id: int, caller: bool) -> bool:
 	if OS.get_name() == "Android":
 		OS.request_permissions()
 	pc = WebRTCPeerConnection.new()
-	var cfg := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
+	var cfg := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
+		{"urls": ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp"], "username": "openrelayproject", "credential": "openrelayproject"}]}
 	if pc.initialize(cfg) != OK:
 		return false
 	ch = pc.create_data_channel("a", {"negotiated": true, "id": 1, "ordered": false, "maxRetransmits": 0})

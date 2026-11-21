@@ -83,7 +83,14 @@ var records: Array = []
 var records_state := ""
 
 
+var photo_tex: Texture2D
+
+
 func _ready() -> void:
+	if FileAccess.file_exists("user://photo.jpg"):
+		var pi := Image.load_from_file("user://photo.jpg")
+		if pi:
+			photo_tex = ImageTexture.create_from_image(pi)
 	randomize()
 	for s in SHAPE_STR:
 		shapes.append(_parse(s))
@@ -1389,6 +1396,17 @@ func _ellipse(c: Vector2, rx: float, ry: float, n := 40) -> PackedVector2Array:
 func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 	if idx < 0:
 		idx = Save.avatar
+	if photo_tex and idx == Save.avatar:
+		draw_circle(c + Vector2(0, 3), r + 6, Color(0, 0, 0, 0.3))
+		draw_circle(c, r + 5, Color("#ffd166"))
+		var pts := PackedVector2Array()
+		var uvs := PackedVector2Array()
+		for k in 48:
+			var a := TAU * k / 48.0
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+			uvs.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
+		draw_colored_polygon(pts, Color.WHITE, uvs, photo_tex)
+		return
 	var bg := Color(AVATARS[idx])
 	var skin := Color("#f1c49a") if idx % 2 == 0 else Color("#c68a5c")
 	var hair: Color = [Color("#3b2416"), Color("#ff4fa3"), Color("#2b2b3a"), Color("#8a4b1f"), Color("#1f1f1f"), Color("#5b3a8f")][idx]
@@ -1803,5 +1821,11 @@ func _photo_chosen(path: String) -> void:
 	var r: Dictionary = await Api.upload_photo(jpg)
 	if r.ok:
 		account_balance = int(r.data.get("balance", account_balance))
+		var f := FileAccess.open("user://photo.jpg", FileAccess.WRITE)
+		if f:
+			f.store_buffer(jpg)
+			f.close()
+		photo_tex = ImageTexture.create_from_image(img)
+		queue_redraw()
 	elif r.code == 402:
 		_need_coins(500)
