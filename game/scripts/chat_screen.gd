@@ -54,6 +54,7 @@ func _ready() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.scroll_deadzone = 40
 	root.add_child(scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -304,7 +305,7 @@ func _add_partner_button(list: VBoxContainer, partner: String, searched := false
 	n.add_theme_font_size_override("font_size", 28)
 	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	n.custom_minimum_size.y = 64
-	n.pressed.connect(func(): _open_thread.call_deferred(partner))
+	n.pressed.connect(func(): _open_thread(partner))
 	row.add_child(n)
 	if searched:
 		var ab := Button.new()
@@ -367,13 +368,13 @@ func _open_thread(partner: String) -> void:
 	_sbtn(gb, Color("#ffb300"))
 	gb.add_theme_color_override("font_color", Color("#2a1f55"))
 	gb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gb.pressed.connect(func(): _gift_dialog.call_deferred(partner))
+	gb.pressed.connect(func(): _gift_dialog(partner))
 	acts.add_child(gb)
 	var cb := Button.new()
 	cb.text = "مکالمه صوتی"
 	_sbtn(cb, Color("#1f8a55"))
 	cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cb.pressed.connect(func(): _call_start.call_deferred(partner))
+	cb.pressed.connect(func(): _call_start(partner))
 	acts.add_child(cb)
 
 	var msgs := VBoxContainer.new()
@@ -494,7 +495,7 @@ func _load_friends(flist: VBoxContainer) -> void:
 			_sbtn(b, spec[1])
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			var k: int = spec[2]
-			b.pressed.connect(func(): _friend_action.call_deferred(k, nm))
+			b.pressed.connect(func(): _friend_action(k, nm))
 			btns.add_child(b)
 		_card(flist, box)
 
