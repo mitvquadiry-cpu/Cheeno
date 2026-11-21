@@ -62,6 +62,15 @@ jobs:
           sed -i 's#</activity>#<intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cheeno"/></intent-filter><intent-filter android:autoVerify="true"><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="https" android:host="game.donitoo.ir" android:pathPrefix="/app-return"/></intent-filter></activity>#' android/build/AndroidManifest.xml
           grep -n -B2 -A2 cheeno android/build/AndroidManifest.xml
 
+      - name: Add WebRTC plugin
+        working-directory: game
+        run: |
+          curl -sL -o /tmp/webrtc.zip https://github.com/godotengine/webrtc-native/releases/download/1.0.9-stable/godot-extension-webrtc.zip
+          unzip -q -o /tmp/webrtc.zip -d /tmp/webrtc
+          mkdir -p addons
+          cp -r /tmp/webrtc/webrtc addons/ || cp -r /tmp/webrtc/* addons/
+          find addons -maxdepth 3 | head -20
+
       - name: Export APK
         env:
           RELEASE_KS_B64: ${{ secrets.RELEASE_KS_B64 }}
