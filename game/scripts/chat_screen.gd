@@ -34,7 +34,7 @@ func _ready() -> void:
 	var top := HBoxContainer.new()
 	root.add_child(top)
 	var back := Button.new()
-	back.text = "‹ بازگشت"
+	back.text = "بازگشت"
 	_sbtn(back, Color("#3a2a7a"))
 	back.pressed.connect(func(): queue_free())
 	top.add_child(back)
@@ -224,7 +224,7 @@ func _show_threads() -> void:
 	var search_row := HBoxContainer.new()
 	content.add_child(search_row)
 	var input := LineEdit.new()
-	input.placeholder_text = "🔍 نام بازیکن را بنویس..."
+	input.placeholder_text = "نام بازیکن را بنویس..."
 	_sinput(input)
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	search_row.add_child(input)
@@ -236,7 +236,7 @@ func _show_threads() -> void:
 	var hdr := _label("گفتگوهای تو", 24)
 	hdr.modulate = Color("#b9a8ff")
 	var clr_all := Button.new()
-	clr_all.text = "🗑 پاک کردن همه"
+	clr_all.text = "پاک کردن همه"
 	_sbtn(clr_all, Color("#a83255"))
 	clr_all.pressed.connect(func():
 		var rr: Dictionary = await Api.chat_clear("")
@@ -261,7 +261,7 @@ func _show_threads() -> void:
 	if r.ok:
 		var its: Array = r.data.get("items", [])
 		if its.is_empty():
-			_empty_note(list, "هنوز گفتگویی نداری 💬\nبالا نام یک بازیکن را جست‌وجو کن و شروع کن.")
+			_empty_note(list, "هنوز گفتگویی نداری\nبالا نام یک بازیکن را جست‌وجو کن و شروع کن.")
 		for it in its:
 			_add_partner_button(list, str(it.get("name", "")))
 
@@ -279,7 +279,7 @@ func _search(q: String, list: VBoxContainer) -> void:
 	_set_status("")
 	var items: Array = r.data.get("items", [])
 	if items.is_empty():
-		_empty_note(list, "کسی با این نام پیدا نشد 😕\nنام را همان‌طور که در بازی ثبت شده بنویس.")
+		_empty_note(list, "کسی با این نام پیدا نشد\nنام را همان‌طور که در بازی ثبت شده بنویس.")
 	for it in items:
 		_add_partner_button(list, str(it.get("name", "")))
 
@@ -291,24 +291,27 @@ func _add_partner_button(list: VBoxContainer, partner: String) -> void:
 	var n := _label(partner, 28)
 	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(n)
-	var arrow := _label("💬", 28)
+	var arrow := _label("", 28)
 	arrow.size_flags_horizontal = Control.SIZE_SHRINK_END
 	row.add_child(arrow)
 	var card := _card(list, row)
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.gui_input.connect(func(ev: InputEvent):
-		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
-			_open_thread(partner)
-	)
+	var hit := Button.new()
+	hit.flat = true
+	hit.focus_mode = Control.FOCUS_NONE
+	hit.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hit.pressed.connect(func(): _open_thread.call_deferred(partner))
+	card.add_child(hit)
 
 
 func _open_thread(partner: String) -> void:
+	if not is_inside_tree():
+		return
 	current_with = partner
 	_clear()
 	var top := HBoxContainer.new()
 	content.add_child(top)
 	var back := Button.new()
-	back.text = "‹ گفتگوها"
+	back.text = "گفتگوها"
 	_sbtn(back, Color("#3a2a7a"))
 	back.pressed.connect(func(): _show_threads())
 	top.add_child(back)
@@ -325,7 +328,7 @@ func _open_thread(partner: String) -> void:
 	top.add_child(block)
 	block.pressed.connect(func(): _toggle_block(block))
 	var clr := Button.new()
-	clr.text = "🗑"
+	clr.text = "حذف"
 	_sbtn(clr, Color("#6b5a9e"))
 	clr.pressed.connect(func():
 		var rr: Dictionary = await Api.chat_clear(partner)
@@ -351,7 +354,7 @@ func _open_thread(partner: String) -> void:
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(input)
 	var send := Button.new()
-	send.text = "ارسال ➤"
+	send.text = "ارسال"
 	_sbtn(send, Color("#2fbf71"))
 	row.add_child(send)
 	send.pressed.connect(func(): _send(input, send))
@@ -369,7 +372,7 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		c.queue_free()
 	var items: Array = r.data.get("items", [])
 	if items.is_empty():
-		_empty_note(msgs, "هنوز پیامی نیست. اولین پیام را بفرست 👋")
+		_empty_note(msgs, "هنوز پیامی نیست. اولین پیام را بفرست")
 	for m in items:
 		var mine: bool = m.get("mine", false)
 		var txt := str(m.get("text", ""))
@@ -380,7 +383,7 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		var mid := int(m.get("id", 0))
 		if not mine:
 			var rep := Button.new()
-			rep.text = "⚑"
+			rep.text = "گزارش"
 			rep.flat = true
 			rep.pressed.connect(func():
 				var rr: Dictionary = await Api.chat_report(mid)
