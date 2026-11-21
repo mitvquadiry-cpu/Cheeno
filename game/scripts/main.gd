@@ -945,7 +945,7 @@ func _find_hint() -> Dictionary:
 								free_nb += 1
 						if free_nb == 0:
 							holes += 1
-				var sc := (rows_full.size() + cols_full.size()) * 100.0 - holes * 30.0 + hand[i].cells.size() * 0.5
+				var sc: float = (rows_full.size() + cols_full.size()) * 100.0 - holes * 30.0 + hand[i].cells.size() * 0.5
 				if sc > best_score:
 					best_score = sc
 					best = {"slot": i, "cell": Vector2i(c, r)}
