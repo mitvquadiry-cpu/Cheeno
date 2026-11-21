@@ -24,7 +24,6 @@ window/handheld/orientation=1
 
 [gui]
 
-theme/custom_font="res://fonts/Vazir.ttf"
 
 [input_devices]
 
