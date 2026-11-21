@@ -1321,8 +1321,10 @@ func _draw() -> void:
 	_draw_avatar(avatar_center(), 38)
 	var nm := "مهمان (لمس کن)" if Api.token == "" else account_name
 	draw_string(f, Vector2(0, 195), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
-	var info := "امتیاز: %d    سکه: %d    رکورد: %d" % [score, _coins(), maxi(Save.best_score, account_best)]
-	draw_string(f, Vector2(0, 232), info, HORIZONTAL_ALIGNMENT_CENTER, 720, 26, Color("#d9d0ff"))
+	var col := Color("#d9d0ff")
+	draw_string(f, Vector2(20, 232), "رکورد: %d" % maxi(Save.best_score, account_best), HORIZONTAL_ALIGNMENT_LEFT, 240, 26, col)
+	draw_string(f, Vector2(0, 232), "سکه: %d" % _coins(), HORIZONTAL_ALIGNMENT_CENTER, 720, 26, col)
+	draw_string(f, Vector2(460, 232), "امتیاز: %d" % score, HORIZONTAL_ALIGNMENT_RIGHT, 240, 26, col)
 
 	var side := n * cell
 	var frame := Rect2(board_origin - Vector2(14, 14), Vector2(side + 28, side + 28))

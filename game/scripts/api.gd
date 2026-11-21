@@ -161,3 +161,27 @@ func _request(path: String, method: int, body: Dictionary = {}) -> Dictionary:
 
 func chat_clear(with_name: String = "") -> Dictionary:
 	return await _request("chat/clear", HTTPClient.METHOD_POST, {"with": with_name})
+
+
+# --- دوستان / هدیه / تماس ---
+func soc_find(q: String) -> Dictionary:
+	return await _request("social/find&q=%s" % q.uri_encode(), HTTPClient.METHOD_GET)
+
+func soc_friends() -> Dictionary:
+	return await _request("social/friends", HTTPClient.METHOD_GET)
+
+func soc_add(name: String) -> Dictionary:
+	return await _request("social/add", HTTPClient.METHOD_POST, {"name": name})
+
+func soc_remove(name: String) -> Dictionary:
+	return await _request("social/remove", HTTPClient.METHOD_POST, {"name": name})
+
+func soc_gift(name: String, amount: int) -> Dictionary:
+	return await _request("social/gift", HTTPClient.METHOD_POST, {"name": name, "amount": amount})
+
+func soc_call_unlock() -> Dictionary:
+	return await _request("social/call_unlock", HTTPClient.METHOD_POST, {})
+
+func soc_call(action: String, data: Dictionary = {}) -> Dictionary:
+	data["action"] = action
+	return await _request("social/call", HTTPClient.METHOD_POST, data)
