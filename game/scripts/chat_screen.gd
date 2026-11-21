@@ -61,6 +61,7 @@ func _ready() -> void:
 	scroll.add_child(content)
 
 	_load_state()
+	_poll_incoming()
 
 
 # کارت قاب‌دار؛ فرزند را داخل آن می‌گذارد
@@ -224,7 +225,7 @@ func _show_threads() -> void:
 	var search_row := HBoxContainer.new()
 	content.add_child(search_row)
 	var input := LineEdit.new()
-	input.placeholder_text = "نام بازیکن را بنویس..."
+	input.placeholder_text = "نام یا شماره موبایل..."
 	_sinput(input)
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	search_row.add_child(input)
@@ -233,6 +234,13 @@ func _show_threads() -> void:
 	_sbtn(go, Color("#ffb300"))
 	go.add_theme_color_override("font_color", Color("#2a1f55"))
 	search_row.add_child(go)
+	var fhdr := _label("دوستان من", 24)
+	fhdr.modulate = Color("#b9a8ff")
+	content.add_child(fhdr)
+	var flist := VBoxContainer.new()
+	flist.add_theme_constant_override("separation", 10)
+	content.add_child(flist)
+	_load_friends(flist)
 	var hdr := _label("گفتگوهای تو", 24)
 	hdr.modulate = Color("#b9a8ff")
 	var clr_all := Button.new()
@@ -268,11 +276,11 @@ func _show_threads() -> void:
 
 func _search(q: String, list: VBoxContainer) -> void:
 	if q.length() < 2:
-		_set_status("حداقل ۲ حرف لازم است.")
+		_set_status("حداقل ۲ حرف یا یک شماره لازم است.")
 		return
 	for c in list.get_children():
 		c.queue_free()
-	var r: Dictionary = await Api.chat_search(q)
+	var r: Dictionary = await Api.soc_find(q)
 	if not r.ok:
 		_set_status(_err(r, "جست‌وجو انجام نشد."))
 		return
@@ -281,19 +289,27 @@ func _search(q: String, list: VBoxContainer) -> void:
 	if items.is_empty():
 		_empty_note(list, "کسی با این نام پیدا نشد\nنام را همان‌طور که در بازی ثبت شده بنویس.")
 	for it in items:
-		_add_partner_button(list, str(it.get("name", "")))
+		_add_partner_button(list, str(it.get("name", "")), true)
 
 
-func _add_partner_button(list: VBoxContainer, partner: String) -> void:
+func _add_partner_button(list: VBoxContainer, partner: String, searched := false) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.add_child(_avatar_circle(partner))
 	var n := _label(partner, 28)
 	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(n)
-	var arrow := _label("", 28)
-	arrow.size_flags_horizontal = Control.SIZE_SHRINK_END
-	row.add_child(arrow)
+	if searched:
+		var ab := Button.new()
+		ab.text = "افزودن دوست"
+		_sbtn(ab, Color("#1f8a55"))
+		ab.pressed.connect(func():
+			var rr: Dictionary = await Api.soc_add(partner)
+			_set_status("به دوستان اضافه شد." if rr.ok else _err(rr, "اضافه نشد."))
+			if rr.ok:
+				_show_threads()
+		)
+		row.add_child(ab)
 	var card := _card(list, row)
 	var hit := Button.new()
 	hit.flat = true
@@ -422,3 +438,199 @@ func _toggle_block(btn: Button) -> void:
 		_set_status("بلاک شد." if on else "آنبلاک شد.")
 	else:
 		_set_status(_err(r, "انجام نشد."))
+
+
+# ---------- دوستان، هدیه، تماس ----------
+var call_unlocked := false
+var friends_balance := 0
+
+
+func _load_friends(flist: VBoxContainer) -> void:
+	var r: Dictionary = await Api.soc_friends()
+	if not r.ok or not is_inside_tree():
+		return
+	call_unlocked = bool(r.data.get("call_unlocked", false))
+	friends_balance = int(r.data.get("balance", 0))
+	var its: Array = r.data.get("items", [])
+	if its.is_empty():
+		_empty_note(flist, "هنوز دوستی نداری. بالا جست‌وجو کن و «افزودن دوست» بزن.")
+	for it in its:
+		var nm := str(it.get("name", ""))
+		var box := VBoxContainer.new()
+		var top := HBoxContainer.new()
+		top.add_theme_constant_override("separation", 12)
+		top.add_child(_avatar_circle(nm, 48))
+		var l := _label(nm, 26)
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		top.add_child(l)
+		box.add_child(top)
+		var btns := HBoxContainer.new()
+		btns.add_theme_constant_override("separation", 8)
+		box.add_child(btns)
+		for spec in [["چت", Color("#5b3fd6"), 0], ["هدیه", Color("#ffb300"), 1], ["تماس", Color("#1f8a55"), 2], ["حذف", Color("#a83255"), 3]]:
+			var b := Button.new()
+			b.text = spec[0]
+			_sbtn(b, spec[1])
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var k: int = spec[2]
+			b.pressed.connect(func(): _friend_action.call_deferred(k, nm))
+			btns.add_child(b)
+		_card(flist, box)
+
+
+func _friend_action(k: int, nm: String) -> void:
+	match k:
+		0: _open_thread(nm)
+		1: _gift_dialog(nm)
+		2: _call_start(nm)
+		3:
+			await Api.soc_remove(nm)
+			_show_threads()
+
+
+func _popup(title: String) -> VBoxContainer:
+	var old := get_node_or_null("Popup")
+	if old:
+		old.queue_free()
+	var dim := ColorRect.new()
+	dim.name = "Popup"
+	dim.color = Color(0, 0, 0, 0.75)
+	dim.size = size
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	var c := _card(dim, v)
+	c.position = Vector2(40, 380)
+	c.size = Vector2(size.x - 80, 10)
+	v.add_child(_label(title, 28))
+	return v
+
+
+func _close_popup() -> void:
+	var p := get_node_or_null("Popup")
+	if p:
+		p.queue_free()
+
+
+func _gift_dialog(nm: String) -> void:
+	var v := _popup("هدیه‌ی سکه به " + nm)
+	var amt := LineEdit.new()
+	amt.placeholder_text = "تعداد سکه (۱ تا ۵۰۰۰)"
+	amt.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	_sinput(amt)
+	v.add_child(amt)
+	var msg := _label("", 22)
+	msg.modulate = Color("#ffd166")
+	v.add_child(msg)
+	var ok := Button.new()
+	ok.text = "ارسال هدیه"
+	_sbtn(ok, Color("#ffb300"))
+	ok.pressed.connect(func():
+		var n := int(amt.text.strip_edges())
+		if n < 1 or n > 5000:
+			msg.text = "عدد بین ۱ تا ۵۰۰۰ بنویس."
+			return
+		var r: Dictionary = await Api.soc_gift(nm, n)
+		if r.ok:
+			_close_popup()
+			_set_status("%d سکه برای %s فرستاده شد." % [n, nm])
+		else:
+			msg.text = _err(r, "ارسال نشد.")
+	)
+	v.add_child(ok)
+	var cn := Button.new()
+	cn.text = "انصراف"
+	_sbtn(cn, Color("#3a2a7a"))
+	cn.pressed.connect(_close_popup)
+	v.add_child(cn)
+
+
+var call_id := 0
+var call_active := false
+
+
+func _call_start(nm: String) -> void:
+	if not call_unlocked:
+		var v := _popup("تماس صوتی قفل است")
+		v.add_child(_label("باز کردن یک‌بار ۱۰۰۰ سکه. هر دقیقه تماس ۱۰ سکه از تماس‌گیرنده کم می‌شود.", 22))
+		var ok := Button.new()
+		ok.text = "باز کردن با ۱۰۰۰ سکه"
+		_sbtn(ok, Color("#1f8a55"))
+		ok.pressed.connect(func():
+			var r: Dictionary = await Api.soc_call_unlock()
+			if r.ok:
+				call_unlocked = true
+				_close_popup()
+				_call_start(nm)
+			else:
+				_set_status(_err(r, "باز نشد."))
+				_close_popup()
+		)
+		v.add_child(ok)
+		var cn := Button.new()
+		cn.text = "انصراف"
+		_sbtn(cn, Color("#3a2a7a"))
+		cn.pressed.connect(_close_popup)
+		v.add_child(cn)
+		return
+	var r2: Dictionary = await Api.soc_call("start", {"name": nm})
+	if not r2.ok:
+		_set_status(_err(r2, "تماس برقرار نشد."))
+		return
+	call_id = int(r2.data.get("id", 0))
+	_call_ui("در حال زنگ زدن به " + nm + "...", false)
+	_call_loop(true)
+
+
+func _call_ui(t: String, incoming: bool) -> void:
+	var v := _popup(t)
+	if incoming:
+		var ac := Button.new()
+		ac.text = "پاسخ"
+		_sbtn(ac, Color("#1f8a55"))
+		ac.pressed.connect(func():
+			var r: Dictionary = await Api.soc_call("accept", {"id": call_id})
+			if r.ok:
+				_call_ui("تماس برقرار است", false)
+				_call_loop(false)
+			else:
+				_close_popup()
+		)
+		v.add_child(ac)
+	var en := Button.new()
+	en.text = "پایان تماس"
+	_sbtn(en, Color("#a83255"))
+	en.pressed.connect(func():
+		call_active = false
+		await Api.soc_call("end", {"id": call_id})
+		_close_popup()
+	)
+	v.add_child(en)
+	var note := _label("توجه: فعلاً فقط وضعیت و هزینه‌ی تماس فعال است؛ انتقال صدا در نسخه‌ی بعد.", 18)
+	note.modulate = Color("#b9a8ff")
+	v.add_child(note)
+
+
+func _call_loop(is_caller: bool) -> void:
+	call_active = true
+	while call_active and is_inside_tree():
+		await get_tree().create_timer(3.0).timeout
+		if not call_active or not is_inside_tree():
+			return
+		var r: Dictionary = await Api.soc_call("tick" if is_caller else "poll", {"id": call_id})
+		if r.ok and r.data.get("state", "") == "ended":
+			call_active = false
+			_close_popup()
+			_set_status("تماس تمام شد.")
+
+
+func _poll_incoming() -> void:
+	while is_inside_tree():
+		await get_tree().create_timer(4.0).timeout
+		if not is_inside_tree() or call_active or not call_unlocked or get_node_or_null("Popup"):
+			continue
+		var r: Dictionary = await Api.soc_call("incoming")
+		if r.ok and r.data.get("call", null) != null:
+			call_id = int(r.data.call.id)
+			_call_ui("تماس از " + str(r.data.call.from), true)

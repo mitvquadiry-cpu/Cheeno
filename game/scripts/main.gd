@@ -265,7 +265,38 @@ func skin_rect(i: int) -> Rect2:
 
 # ---------- حلقه ----------
 
+var native_edit: LineEdit = null
+var native_for := ""
+
+
+func _sync_native() -> void:
+	var want := panel in ["name", "newcode"]
+	if not want:
+		if native_edit:
+			native_edit.get_parent().queue_free()
+			native_edit = null
+			native_for = ""
+		return
+	if native_edit == null or native_for != panel:
+		if native_edit:
+			native_edit.get_parent().queue_free()
+		var cl := CanvasLayer.new()
+		cl.layer = 20
+		native_edit = LineEdit.new()
+		native_edit.max_length = 12
+		native_edit.placeholder_text = "برای تایپ با کیبورد گوشی اینجا بزن"
+		native_edit.position = Vector2(110, 340 if panel == "newcode" else 346)
+		native_edit.size = Vector2(500, 44)
+		native_edit.text_changed.connect(func(t: String): name_text = t)
+		cl.add_child(native_edit)
+		add_child(cl)
+		native_for = panel
+	elif native_edit.text != name_text and not native_edit.has_focus():
+		native_edit.text = name_text
+
+
 func _process(delta: float) -> void:
+	_sync_native()
 	time += delta
 	for fl in flashes:
 		fl["t"] += delta
@@ -1352,11 +1383,11 @@ func _draw() -> void:
 
 	if drag >= 0:
 		var piece: Dictionary = hand[drag]
-		var col := _col(piece.color)
+		var dcol := _col(piece.color)
 		var target := _target_cell(drag, drag_pos)
 		if _can_place(piece.cells, target):
 			for v in piece.cells:
-				_draw_block(cell_pos(target.x + v.x, target.y + v.y), cell, col, 0.35)
+				_draw_block(cell_pos(target.x + v.x, target.y + v.y), cell, dcol, 0.35)
 		var tl := _ghost_tl(drag, drag_pos)
 		for v in piece.cells:
 			_draw_block(tl + Vector2(v) * cell, cell, col)
