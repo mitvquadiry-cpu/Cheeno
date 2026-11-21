@@ -185,3 +185,7 @@ func soc_call_unlock() -> Dictionary:
 func soc_call(action: String, data: Dictionary = {}) -> Dictionary:
 	data["action"] = action
 	return await _request("social/call", HTTPClient.METHOD_POST, data)
+
+
+func chat_unread() -> Dictionary:
+	return await _request("chat/unread", HTTPClient.METHOD_GET)

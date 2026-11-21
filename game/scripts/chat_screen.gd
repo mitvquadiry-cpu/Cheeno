@@ -360,6 +360,7 @@ func _open_thread(partner: String) -> void:
 			_set_status(_err(rr, "پاک نشد."))
 	)
 	top.add_child(clr)
+	_live_loop(partner)
 	var acts := HBoxContainer.new()
 	acts.add_theme_constant_override("separation", 8)
 	content.add_child(acts)
@@ -433,6 +434,17 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		msgs.add_child(wrap)
 		var bub := _card(wrap, box, Color("#4a35a8") if mine else Color("#2a1f55"))
 		bub.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_SHRINK_BEGIN
+
+
+func _live_loop(partner: String) -> void:
+	while is_inside_tree():
+		await get_tree().create_timer(3.0).timeout
+		if not is_inside_tree() or current_with != partner:
+			return
+		var msgs := content.get_node_or_null("Msgs") as VBoxContainer
+		if msgs == null:
+			return
+		await _refresh_messages(msgs)
 
 
 func _send(input: LineEdit, btn: Button) -> void:
@@ -650,7 +662,7 @@ func _call_loop(is_caller: bool) -> void:
 func _poll_incoming() -> void:
 	while is_inside_tree():
 		await get_tree().create_timer(4.0).timeout
-		if not is_inside_tree() or call_active or not call_unlocked or get_node_or_null("Popup"):
+		if not is_inside_tree() or call_active or get_node_or_null("Popup"):
 			continue
 		var r: Dictionary = await Api.soc_call("incoming")
 		if r.ok and r.data.get("call", null) != null:

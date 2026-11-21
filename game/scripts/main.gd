@@ -87,6 +87,11 @@ func _ready() -> void:
 		shapes.append(_parse(s))
 	_make_sounds()
 	_apply_audio()
+	var ut := Timer.new()
+	ut.wait_time = 6.0
+	ut.autostart = true
+	ut.timeout.connect(_poll_unread)
+	add_child(ut)
 	if not _load_game():
 		new_game()
 	_handle_launch_uri()
@@ -1095,6 +1100,29 @@ func _make_sounds() -> void:
 		snd[k] = p
 
 
+var unread_count := 0
+var unread_last := -1
+var unread_busy := false
+
+
+func _poll_unread() -> void:
+	if Api.token == "" or unread_busy:
+		return
+	unread_busy = true
+	var r: Dictionary = await Api.chat_unread()
+	unread_busy = false
+	if not r.ok:
+		return
+	var c := int(r.data.get("count", 0))
+	var l := int(r.data.get("last_id", 0))
+	if unread_last >= 0 and l > unread_last and c > 0:
+		_play("pick")
+	unread_last = l
+	if c != unread_count:
+		unread_count = c
+		queue_redraw()
+
+
 func _play(name: String) -> void:
 	if snd.has(name) and not Save.muted:
 		snd[name].play()
@@ -1350,6 +1378,10 @@ func _draw() -> void:
 		_btn(top_btn(i), lb, Color("#140d2b"), 22)
 
 	_draw_avatar(avatar_center(), 38)
+	if unread_count > 0:
+		var bc := avatar_center() + Vector2(34, -34)
+		draw_circle(bc, 17, Color("#e53935"))
+		draw_string(f, bc + Vector2(-17, 8), str(mini(unread_count, 99)), HORIZONTAL_ALIGNMENT_CENTER, 34, 22, Color.WHITE)
 	var nm := "مهمان (لمس کن)" if Api.token == "" else account_name
 	draw_string(f, Vector2(0, 195), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	var col := Color("#d9d0ff")
