@@ -1446,7 +1446,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 					var it: Dictionary = records[i]
 					var cr := Rect2(Vector2(70, 380 + i * 92), Vector2(580, 80))
 					var rk := int(it.get("rank", i + 1))
-					var bc := [Color("#ffd166"), Color("#c0c7d6"), Color("#cd7f32")][rk - 1] if rk >= 1 and rk <= 3 else Color("#7b5cff")
+					var bc: Color = [Color("#ffd166"), Color("#c0c7d6"), Color("#cd7f32")][rk - 1] if rk >= 1 and rk <= 3 else Color("#7b5cff")
 					draw_rect(cr, Color("#2a1f55"))
 					draw_rect(cr, bc, false, 3.0)
 					draw_rect(Rect2(cr.position + Vector2(6, 6), cr.size - Vector2(12, 12)), Color("#3c2a6e"), false, 1.0)
