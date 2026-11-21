@@ -84,6 +84,7 @@ var records_state := ""
 
 
 var photo_tex: Texture2D
+var rec_tex := {}
 
 
 func _ready() -> void:
@@ -899,6 +900,13 @@ func _load_records() -> void:
 	if r.ok and r.data.get("items") is Array:
 		records = r.data.items
 		records_state = "ok"
+		for it in records:
+			var u := str(it.get("photo", ""))
+			if u != "":
+				var t: Texture2D = await PhotoCache.get_tex(self, u)
+				if t:
+					rec_tex[u] = t
+					queue_redraw()
 	else:
 		records_state = "error"
 
@@ -1692,6 +1700,16 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 					draw_rect(cr, bc, false, 3.0)
 					draw_rect(Rect2(cr.position + Vector2(6, 6), cr.size - Vector2(12, 12)), Color("#3c2a6e"), false, 1.0)
 					draw_circle(cr.position + Vector2(44, 40), 28, bc)
+					var rt: Texture2D = rec_tex.get(str(it.get("photo", "")))
+					if rt:
+						var rc := cr.position + Vector2(44, 40)
+						var pts := PackedVector2Array()
+						var uvs := PackedVector2Array()
+						for k in 40:
+							var a := TAU * k / 40.0
+							pts.append(rc + Vector2(cos(a), sin(a)) * 26)
+							uvs.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
+						draw_colored_polygon(pts, Color.WHITE, uvs, rt)
 					draw_string(f, cr.position + Vector2(16, 51), "%d" % rk, HORIZONTAL_ALIGNMENT_CENTER, 56, 30, Color("#140d2b"))
 					draw_string(f, cr.position + Vector2(90, 52), str(it.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, 320, 28, Color.WHITE)
 					draw_string(f, cr.position + Vector2(380, 52), "%d" % int(it.get("score", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 180, 30, Color("#ffd166"))

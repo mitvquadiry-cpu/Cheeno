@@ -148,22 +148,7 @@ func _sinput(e: LineEdit) -> void:
 
 
 func _avatar_circle(name_: String, sz := 56) -> Control:
-	var p := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	var h := float(abs(name_.hash()) % 360) / 360.0
-	sb.bg_color = Color.from_hsv(h, 0.55, 0.85)
-	sb.set_corner_radius_all(sz / 2)
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(sz, sz)
-	var l := Label.new()
-	l.text = name_.substr(0, 1)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 28)
-	l.add_theme_color_override("font_color", Color.WHITE)
-	p.add_child(l)
-	return p
-
+	return PhotoCache.make(name_, sz)
 
 func _empty_note(parent: Control, t: String) -> void:
 	var l := _label(t, 22)

@@ -156,6 +156,7 @@ func _request(path: String, method: int, body: Dictionary = {}) -> Dictionary:
 	var code: int = res[1]
 	var parsed = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8())
 	var data: Dictionary = parsed if parsed is Dictionary else {}
+	PhotoCache.learn(data)
 	return {"ok": code >= 200 and code < 300, "code": code, "data": data}
 
 
