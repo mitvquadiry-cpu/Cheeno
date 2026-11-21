@@ -276,6 +276,9 @@ func _process(delta: float) -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if time < 1.5:
 		return
+	# وقتی چت باز است، هیچ لمس یا کلیدی نباید به صفحه‌ی بازی برسد (مثلاً دکمه‌ی خروج)
+	if get_node_or_null("ChatLayer") != null:
+		return
 	var event := ev.duplicate()
 	if event is InputEventMouse:
 		event.position.y -= top_off
@@ -1540,6 +1543,7 @@ func _open_chat() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color("#140d2b")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(bg)
 	var scr: Control = load("res://scripts/chat_screen.gd").new()
 	layer.add_child(scr)

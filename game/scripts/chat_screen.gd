@@ -24,6 +24,7 @@ func _ready() -> void:
 	bg.color = Color("#140d2b")
 	bg.size = vs
 	add_child(bg)
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	root = VBoxContainer.new()
 	root.position = Vector2(20, 20)
 	root.size = vs - Vector2(40, 40)
