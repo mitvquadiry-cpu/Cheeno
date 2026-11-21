@@ -65,7 +65,8 @@ jobs:
       - name: Add WebRTC plugin
         working-directory: game
         run: |
-          curl -sL -o /tmp/webrtc.zip https://github.com/godotengine/webrtc-native/releases/download/1.0.9-stable/godot-extension-webrtc.zip
+          (command -v unzip >/dev/null && command -v python3 >/dev/null) || (apt-get update -qq && apt-get install -y -qq unzip python3)
+          python3 -c "import urllib.request as u,sys;u.urlretrieve(sys.argv[1],sys.argv[2])" https://github.com/godotengine/webrtc-native/releases/download/1.0.9-stable/godot-extension-webrtc.zip /tmp/webrtc.zip
           unzip -q -o /tmp/webrtc.zip -d /tmp/webrtc
           mkdir -p addons
           cp -r /tmp/webrtc/webrtc addons/ || cp -r /tmp/webrtc/* addons/
