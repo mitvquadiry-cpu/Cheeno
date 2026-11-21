@@ -15,9 +15,15 @@ var current_with := ""
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# والد CanvasLayer است و اندازه ندارد؛ پس اندازه را صریح می‌دهیم (علت صفحه‌ی خالی)
+	var vs := get_viewport().get_visible_rect().size
+	position = Vector2.ZERO
+	size = vs
+	custom_minimum_size = vs
 	root = VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.position = Vector2(20, 20)
+	root.size = vs - Vector2(40, 40)
+	root.add_theme_constant_override("separation", 14)
 	add_child(root)
 
 	var top := HBoxContainer.new()
@@ -29,6 +35,8 @@ func _ready() -> void:
 	var title := Label.new()
 	title.text = "چت خصوصی"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
 	top.add_child(title)
 
 	status = Label.new()
@@ -36,12 +44,40 @@ func _ready() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 12)
 	scroll.add_child(content)
 
 	_load_state()
+
+
+# کارت قاب‌دار؛ فرزند را داخل آن می‌گذارد
+func _card(parent: Control, child: Control, col := Color("#2a1f55")) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = col
+	sb.set_corner_radius_all(18)
+	sb.set_border_width_all(2)
+	sb.border_color = Color("#7b5cff")
+	sb.set_content_margin_all(16)
+	p.add_theme_stylebox_override("panel", sb)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.add_child(child)
+	parent.add_child(p)
+	return p
+
+
+func _label(t: String, fs := 24) -> Label:
+	var l := Label.new()
+	l.text = t
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.add_theme_font_size_override("font_size", fs)
+	return l
 
 
 func _set_status(t: String) -> void:
@@ -77,17 +113,19 @@ func _load_state() -> void:
 
 func _show_name_form() -> void:
 	_clear()
-	var l := Label.new()
-	l.text = "یک نام برای چت انتخاب کن (۳ تا %d حرف). دیگران با این نام تو را پیدا می‌کنند. شماره‌ی تلفن نمایش داده نمی‌شود." % NAME_MAX
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(l)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	box.add_child(_label("یک نام برای چت انتخاب کن (۳ تا %d حرف). دیگران با این نام تو را پیدا می‌کنند. شماره‌ی تلفن نمایش داده نمی‌شود." % NAME_MAX))
 	var input := LineEdit.new()
 	input.max_length = NAME_MAX
 	input.placeholder_text = "نام چت"
-	content.add_child(input)
+	input.custom_minimum_size = Vector2(0, 64)
+	box.add_child(input)
 	var btn := Button.new()
 	btn.text = "ثبت نام"
-	content.add_child(btn)
+	btn.custom_minimum_size = Vector2(0, 64)
+	box.add_child(btn)
+	_card(content, box)
 	btn.pressed.connect(func():
 		btn.disabled = true
 		var r: Dictionary = await Api.chat_set_name(input.text.strip_edges())
@@ -101,13 +139,14 @@ func _show_name_form() -> void:
 
 func _show_unlock(price: int, balance: int) -> void:
 	_clear()
-	var l := Label.new()
-	l.text = "برای باز کردن چت خصوصی %d سکه یک‌بار پرداخت می‌شود. بعد از آن هر پیام ۲ سکه هزینه دارد.\nموجودی تو: %d سکه." % [price, balance]
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(l)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	box.add_child(_label("برای باز کردن چت خصوصی %d سکه یک‌بار پرداخت می‌شود. بعد از آن هر پیام ۲ سکه هزینه دارد.\nموجودی تو: %d سکه." % [price, balance]))
 	var btn := Button.new()
 	btn.text = "باز کردن چت (%d سکه)" % price
-	content.add_child(btn)
+	btn.custom_minimum_size = Vector2(0, 64)
+	box.add_child(btn)
+	_card(content, box)
 	btn.pressed.connect(func():
 		btn.disabled = true
 		var r: Dictionary = await Api.chat_unlock()
@@ -118,11 +157,9 @@ func _show_unlock(price: int, balance: int) -> void:
 		else:
 			_set_status(_err(r, "باز کردن چت انجام نشد."))
 	)
-	var rules := Label.new()
-	rules.text = "قوانین: ادمین سایت می‌تواند همه‌ی پیام‌های چت را ببیند. توهین، تهدید و کلاهبرداری ممنوع است و حساب می‌تواند مسدود شود."
-	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var rules := _label("قوانین: ادمین سایت می‌تواند همه‌ی پیام‌های چت را ببیند. توهین، تهدید و کلاهبرداری ممنوع است و حساب می‌تواند مسدود شود.", 20)
 	rules.modulate = Color(1, 0.85, 0.4)
-	content.add_child(rules)
+	_card(content, rules, Color("#3a2a1a"))
 
 
 func _show_threads() -> void:
@@ -136,7 +173,10 @@ func _show_threads() -> void:
 	var go := Button.new()
 	go.text = "جست‌وجو"
 	search_row.add_child(go)
+	input.custom_minimum_size = Vector2(0, 64)
 	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 10)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(list)
 	go.pressed.connect(func(): _search(input.text.strip_edges(), list))
 	input.text_submitted.connect(func(t): _search(t.strip_edges(), list))
@@ -169,7 +209,9 @@ func _search(q: String, list: VBoxContainer) -> void:
 
 func _add_partner_button(list: VBoxContainer, partner: String) -> void:
 	var b := Button.new()
-	b.text = partner
+	b.text = "💬  " + partner
+	b.custom_minimum_size = Vector2(0, 70)
+	b.add_theme_font_size_override("font_size", 26)
 	b.pressed.connect(func(): _open_thread(partner))
 	list.add_child(b)
 
@@ -190,6 +232,8 @@ func _open_thread(partner: String) -> void:
 
 	var msgs := VBoxContainer.new()
 	msgs.name = "Msgs"
+	msgs.add_theme_constant_override("separation", 10)
+	msgs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(msgs)
 
 	var row := HBoxContainer.new()
@@ -197,6 +241,7 @@ func _open_thread(partner: String) -> void:
 	var input := LineEdit.new()
 	input.max_length = MSG_MAX
 	input.placeholder_text = "پیام (حداکثر ۲۰۰ حرف، ۲ سکه)"
+	input.custom_minimum_size = Vector2(0, 64)
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(input)
 	var send := Button.new()
@@ -217,10 +262,7 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		c.queue_free()
 	for m in r.data.get("items", []):
 		var mine: bool = m.get("mine", false)
-		var l := Label.new()
-		l.text = "%s: %s" % ["تو" if mine else current_with, str(m.get("text", ""))]
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var l := _label("%s: %s" % ["تو" if mine else current_with, str(m.get("text", ""))], 22)
 		var row := HBoxContainer.new()
 		row.add_child(l)
 		if not mine:
@@ -232,7 +274,7 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 				_set_status("گزارش ثبت شد." if rr.ok else _err(rr, "گزارش انجام نشد."))
 			)
 			row.add_child(rep)
-		msgs.add_child(row)
+		_card(msgs, row, Color("#3b2a7a") if mine else Color("#2a1f55"))
 
 
 func _send(input: LineEdit, btn: Button) -> void:

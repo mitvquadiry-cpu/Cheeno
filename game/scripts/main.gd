@@ -9,11 +9,11 @@ const LIFT := 110.0
 const SCORE_PER_GROW := 30
 const SCORE_PER_SHAPE := 10
 const LINES_PER_COIN := 12       # هر ۱۲ ردیف پاک‌شده، ۱ سکه
-const HINT_COST := 5
-const SHUFFLE_COST := 5
-const CONTINUE_COST := 10
-const UNDO_COST := 3
-const ROTATE_COST := 3
+const HINT_COST := 3
+const SHUFFLE_COST := 3
+const CONTINUE_COST := 6
+const UNDO_COST := 2
+const ROTATE_COST := 2
 const PACKS := [
 	{"id": "starter", "name": "بسته شروع (یک‌بار)", "coins": 1000, "price": 25000},
 	{"id": "small", "name": "بسته کوچک", "coins": 500, "price": 50000},
@@ -41,6 +41,15 @@ const SKINS := [
 	{"name": "جنگل", "cost": 100, "colors": ["#95d5b2", "#52b788", "#2d6a4f", "#b7e4c7", "#d8f3dc"]},
 	{"name": "آتش", "cost": 150, "colors": ["#ff4800", "#ff7b00", "#ffaa00", "#ffd000", "#d00000"]},
 ]
+const FX := [
+	{"name": "موج", "cost": 0}, {"name": "جرقه", "cost": 40}, {"name": "ستاره", "cost": 70},
+	{"name": "انفجار", "cost": 100}, {"name": "آتش‌بازی", "cost": 150},
+]
+const FRAMES := [
+	{"name": "ساده", "cost": 0}, {"name": "طلایی دوخطه", "cost": 50}, {"name": "نئون نورانی", "cost": 80},
+	{"name": "رنگین‌کمان", "cost": 120}, {"name": "سلطنتی", "cost": 180},
+]
+var store_tab := 0
 const AVATARS := ["#ff6ad5", "#6bd6ff", "#ffd166", "#9ff0c9", "#7b5cff", "#ff7b00"]
 
 var shapes: Array = []
@@ -238,7 +247,7 @@ func panel_rect() -> Rect2:
 
 func close_rect() -> Rect2:
 	if panel == "profile" or panel == "name":
-		return Rect2(Vector2(220, 1010), Vector2(280, 56))
+		return Rect2(Vector2(220, 1080), Vector2(280, 56))
 	return Rect2(Vector2(220, 920), Vector2(280, 56))
 
 
@@ -404,9 +413,13 @@ func _press_panel(p: Vector2) -> void:
 		return
 	match panel:
 		"skins":
-			for i in SKINS.size():
+			for t in 3:
+				if Rect2(Vector2(70 + t * 195, 292), Vector2(190, 40)).has_point(p):
+					store_tab = t
+					return
+			for i in 5:
 				if skin_rect(i).has_point(p):
-					_pick_skin(i)
+					_pick_item(store_tab, i)
 		"sound":
 			if Rect2(Vector2(100, 440), Vector2(520, 70)).has_point(p):
 				Save.muted = not Save.muted
@@ -434,7 +447,7 @@ func _press_panel(p: Vector2) -> void:
 			if Api.token != "" and is_admin and Rect2(Vector2(110, 912), Vector2(500, 60)).has_point(p):
 				panel = "codes"
 				_load_codes()
-			if Api.token != "" and Rect2(Vector2(110, 990), Vector2(500, 60)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 990), Vector2(500, 60)).has_point(p) and not close_rect().has_point(p):
 				_open_chat()
 			if Rect2(Vector2(110, 650), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
@@ -629,6 +642,30 @@ func _pick_skin(i: int) -> void:
 		msg = "پوسته خریداری شد"
 	else:
 		_need_coins(cost)
+
+
+func _pick_item(tab: int, i: int) -> void:
+	if tab == 0:
+		_pick_skin(i)
+		if Api.token != "" and Save.owned.has(i):
+			Api.equip("skin", i)
+		return
+	var kind := "fx" if tab == 1 else "frame"
+	var own: Array = Save.owned_fx if tab == 1 else Save.owned_frames
+	var cost: int = (FX if tab == 1 else FRAMES)[i].cost
+	if not own.has(i):
+		if not await _pay(cost, "%s_%d" % [kind, i]):
+			_need_coins(cost)
+			return
+		own.append(i)
+		msg = "خریداری شد"
+	if tab == 1:
+		Save.fx = i
+	else:
+		Save.frame = i
+	Save.save()
+	if Api.token != "":
+		Api.equip(kind, i)
 
 
 # پرداخت: با حساب وارد‌شده از سرور، وگرنه از سکه‌ی محلی
@@ -834,6 +871,7 @@ func _clear_lines() -> void:
 		flashes.append({
 			"pos": cell_pos(idx % n, idx / n) + Vector2(cell / 2, cell / 2),
 			"color": _col(board[idx] - 1),
+			"fx": Save.fx,
 			"t": 0.0,
 		})
 		board[idx] = 0
@@ -858,14 +896,60 @@ func _send_lines(k: int) -> void:
 
 
 func _find_hint() -> Dictionary:
+	# راهنمای هوشمند: هر جایگذاری را شبیه‌سازی می‌کند؛ بیشترین ردیف/ستون پاک‌شده،
+	# بعد کمترین حفره و بیشترین پر شدن ردیف‌ها را ترجیح می‌دهد.
+	var best := {}
+	var best_score := -1000000.0
 	for i in hand.size():
 		if hand[i] == null:
 			continue
 		for r in n:
 			for c in n:
-				if _can_place(hand[i].cells, Vector2i(c, r)):
-					return {"slot": i, "cell": Vector2i(c, r)}
-	return {}
+				if not _can_place(hand[i].cells, Vector2i(c, r)):
+					continue
+				var sim: Array = board.duplicate()
+				for v in hand[i].cells:
+					sim[(r + v.y) * n + c + v.x] = 1
+				var rows_full: Array = []
+				var cols_full: Array = []
+				for k in n:
+					var rf := true
+					var cf := true
+					for m in n:
+						if sim[k * n + m] == 0:
+							rf = false
+						if sim[m * n + k] == 0:
+							cf = false
+					if rf:
+						rows_full.append(k)
+					if cf:
+						cols_full.append(k)
+				for k in rows_full:
+					for m in n:
+						sim[k * n + m] = 0
+				for k in cols_full:
+					for m in n:
+						sim[m * n + k] = 0
+				var holes := 0
+				var fill := 0.0
+				for y in n:
+					for x in n:
+						if sim[y * n + x] != 0:
+							fill += 1
+							continue
+						var free_nb := 0
+						for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+							var nx: int = x + d.x
+							var ny: int = y + d.y
+							if nx >= 0 and ny >= 0 and nx < n and ny < n and sim[ny * n + nx] == 0:
+								free_nb += 1
+						if free_nb == 0:
+							holes += 1
+				var sc := (rows_full.size() + cols_full.size()) * 100.0 - holes * 30.0 + hand[i].cells.size() * 0.5
+				if sc > best_score:
+					best_score = sc
+					best = {"slot": i, "cell": Vector2i(c, r)}
+	return best
 
 
 func _use_hint() -> void:
@@ -892,6 +976,15 @@ func refresh_profile() -> void:
 		for s in r.data.get("skins", []):
 			if not Save.owned.has(int(s)):
 				Save.owned.append(int(s))
+		for s in r.data.get("fx", []):
+			if not Save.owned_fx.has(int(s)):
+				Save.owned_fx.append(int(s))
+		for s in r.data.get("frames", []):
+			if not Save.owned_frames.has(int(s)):
+				Save.owned_frames.append(int(s))
+		Save.skin = int(r.data.get("sel_skin", Save.skin))
+		Save.fx = int(r.data.get("sel_fx", Save.fx))
+		Save.frame = int(r.data.get("sel_frame", Save.frame))
 		Save.save()
 	elif r.code == 403:
 		Api.logout()
@@ -907,6 +1000,10 @@ func _reset_guest_progress() -> void:
 	Save.line_acc = 0
 	Save.owned = [0]
 	Save.skin = 0
+	Save.fx = 0
+	Save.frame = 0
+	Save.owned_fx = [0]
+	Save.owned_frames = [0]
 	Save.free = {"hint": 0, "shuffle": 0, "undo": 0, "rotate": 0}
 	Save.save()
 
@@ -1119,18 +1216,82 @@ func _draw_avatar(c: Vector2, r: float, idx := -1) -> void:
 				draw_colored_polygon(PackedVector2Array([c + Vector2(x - r * 0.1, -r * 0.3), c + Vector2(x + r * 0.05, -r * 0.62), c + Vector2(x + r * 0.1, -r * 0.3)]), hair)
 		_: # موی کناری بلند
 			draw_colored_polygon(_ellipse(c + Vector2(-r * 0.12, -r * 0.34), r * 0.4, r * 0.24), hair)
-	# چشم‌ها و ابرو
-	draw_circle(c + Vector2(-r * 0.16, -r * 0.1), r * 0.05, dark)
-	draw_circle(c + Vector2(r * 0.16, -r * 0.1), r * 0.05, dark)
-	draw_line(c + Vector2(-r * 0.24, -r * 0.2), c + Vector2(-r * 0.08, -r * 0.22), dark, maxf(1.5, r * 0.03))
-	draw_line(c + Vector2(r * 0.08, -r * 0.22), c + Vector2(r * 0.24, -r * 0.2), dark, maxf(1.5, r * 0.03))
+	# چشم‌های طبیعی: سفیدی، عنبیه، مردمک و برق
+	var iris: Color = [Color("#4a2e1a"), Color("#2e7d5b"), Color("#3a5fa8"), Color("#6b4a2a"), Color("#222222"), Color("#7a3fa8")][idx]
 	for sx in [-1.0, 1.0]:
-		draw_circle(c + Vector2(sx * r * 0.16 - r * 0.025, -r * 0.13), r * 0.022, Color.WHITE)
-	# لبخند
-	draw_arc(c + Vector2(0, -r * 0.02), r * 0.17, deg_to_rad(20), deg_to_rad(160), 14, dark, maxf(2.0, r * 0.04))
+		var ec: Vector2 = c + Vector2(sx * r * 0.17, -r * 0.1)
+		draw_colored_polygon(_ellipse(ec, r * 0.09, r * 0.06), Color.WHITE)
+		draw_circle(ec + Vector2(0, r * 0.004), r * 0.05, iris)
+		draw_circle(ec + Vector2(0, r * 0.004), r * 0.026, dark)
+		draw_circle(ec + Vector2(-r * 0.02, -r * 0.02), r * 0.014, Color.WHITE)
+		draw_arc(ec, r * 0.09, deg_to_rad(200), deg_to_rad(340), 8, dark, maxf(1.2, r * 0.025))
+	# ابروها با حالت متفاوت برای هر آواتار
+	var tilt: float = [0.0, -0.03, 0.04, -0.02, 0.05, 0.0][idx]
+	var bw := maxf(1.5, r * 0.035)
+	draw_line(c + Vector2(-r * 0.27, -r * (0.22 - tilt)), c + Vector2(-r * 0.08, -r * (0.23 + tilt)), hair.darkened(0.2), bw)
+	draw_line(c + Vector2(r * 0.08, -r * (0.23 + tilt)), c + Vector2(r * 0.27, -r * (0.22 - tilt)), hair.darkened(0.2), bw)
+	# بینی
+	draw_arc(c + Vector2(0, r * 0.0), r * 0.05, deg_to_rad(20), deg_to_rad(160), 6, skin.darkened(0.25), maxf(1.2, r * 0.02))
+	# دهان: حالت‌های مختلف
+	var mc := c + Vector2(0, r * 0.1)
+	var lipc := Color("#b5483f")
+	match idx % 3:
+		0: # لبخند ملایم
+			draw_arc(mc + Vector2(0, -r * 0.08), r * 0.15, deg_to_rad(25), deg_to_rad(155), 14, lipc, maxf(2.0, r * 0.04))
+		1: # لبخند باز با دندان
+			draw_colored_polygon(_ellipse(mc + Vector2(0, r * 0.02), r * 0.13, r * 0.07), Color("#7a1f2b"))
+			draw_rect(Rect2(mc + Vector2(-r * 0.1, -r * 0.03), Vector2(r * 0.2, r * 0.035)), Color.WHITE)
+		_: # لبخند کج شیطون
+			draw_arc(mc + Vector2(r * 0.02, -r * 0.07), r * 0.14, deg_to_rad(15), deg_to_rad(140), 14, lipc, maxf(2.0, r * 0.04))
 	# گونه
-	draw_circle(c + Vector2(-r * 0.25, r * 0.07), r * 0.06, Color(1, 0.4, 0.5, 0.35))
-	draw_circle(c + Vector2(r * 0.25, r * 0.07), r * 0.06, Color(1, 0.4, 0.5, 0.35))
+	draw_circle(c + Vector2(-r * 0.27, r * 0.08), r * 0.07, Color(1, 0.4, 0.5, 0.3))
+	draw_circle(c + Vector2(r * 0.27, r * 0.08), r * 0.07, Color(1, 0.4, 0.5, 0.3))
+
+
+func _draw_fx(kind: int, pos: Vector2, k: float, col: Color) -> void:
+	var a := 1.0 - k
+	match kind:
+		1: # جرقه
+			for i in 8:
+				var d := Vector2.from_angle(i * TAU / 8.0)
+				draw_line(pos + d * (10 + k * 60), pos + d * (22 + k * 80), _with_alpha(col, a), 3.0)
+		2: # ستاره
+			for i in 5:
+				var d := Vector2.from_angle(i * TAU / 5.0 + k * 3.0) * (8 + k * 50)
+				draw_circle(pos + d, 7.0 * a + 1.0, _with_alpha(Color("#ffe98a"), a))
+		3: # انفجار
+			draw_circle(pos, 10 + k * 70, _with_alpha(Color("#ff7b00"), a * 0.6))
+			draw_circle(pos, 6 + k * 35, _with_alpha(Color("#ffd000"), a))
+		4: # آتش‌بازی
+			for i in 12:
+				var d := Vector2.from_angle(i * TAU / 12.0)
+				var c2 := Color.from_hsv(float(i) / 12.0, 0.8, 1.0, a)
+				draw_circle(pos + d * (k * 80) + Vector2(0, k * k * 30), 4.0, c2)
+		_:
+			draw_arc(pos, 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(col, a), 4.0)
+
+
+func _draw_frame(kind: int, r: Rect2, t: float) -> void:
+	match kind:
+		1:
+			draw_rect(r, Color("#ffd166"), false, 3.0)
+			draw_rect(r.grow(-6), Color("#ffd166"), false, 2.0)
+		2:
+			var g := 0.5 + 0.5 * sin(t * 4.0)
+			for i in 4:
+				draw_rect(r.grow(i * 3), Color(0.2, 1, 0.9, (0.5 - i * 0.1) * (0.5 + g)), false, 3.0)
+			draw_rect(r, Color("#7dfcf0"), false, 2.0)
+		3:
+			draw_rect(r, Color.from_hsv(fposmod(t * 0.3, 1.0), 0.8, 1.0), false, 5.0)
+			draw_rect(r.grow(-7), Color.from_hsv(fposmod(t * 0.3 + 0.5, 1.0), 0.8, 1.0), false, 2.0)
+		4:
+			draw_rect(r.grow(4), Color("#c9962b"), false, 6.0)
+			draw_rect(r.grow(-3), Color("#fff2a8"), false, 2.0)
+			for cp in [r.position, r.position + Vector2(r.size.x, 0), r.position + Vector2(0, r.size.y), r.end]:
+				draw_circle(cp, 8.0, Color("#e0245e"))
+				draw_circle(cp, 3.0, Color.WHITE)
+		_:
+			draw_rect(r, Color("#4b3a8a"), false, 2.0)
 
 
 func _draw() -> void:
@@ -1164,7 +1325,7 @@ func _draw() -> void:
 	var frame := Rect2(board_origin - Vector2(14, 14), Vector2(side + 28, side + 28))
 	draw_rect(Rect2(frame.position + Vector2(0, 10), frame.size), Color(0, 0, 0, 0.45))
 	draw_rect(frame, Color("#1a1036"))
-	draw_rect(frame, Color("#4b3a8a"), false, 2.0)
+	_draw_frame(Save.frame, frame, time)
 	for r in n:
 		for c in n:
 			var v: int = board[r * n + c]
@@ -1196,8 +1357,7 @@ func _draw() -> void:
 			_draw_block(tl + Vector2(v) * cell, cell, col)
 
 	for fl in flashes:
-		var k: float = fl["t"] / 0.5
-		draw_arc(fl["pos"], 20.0 + k * 90.0, 0, TAU, 32, _with_alpha(fl["color"], 1.0 - k), 4.0)
+		_draw_fx(int(fl.get("fx", 0)), fl["pos"], fl["t"] / 0.5, fl["color"])
 
 	if not hint.is_empty():
 		var pulse := 0.5 + 0.5 * sin(time * 6.0)
@@ -1248,15 +1408,28 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			draw_string(f, Vector2(60, 620), "راهنما، تعویض کارت‌ها، چرخش کارت، برگشت حرکت", HORIZONTAL_ALIGNMENT_CENTER, 600, 24, Color.WHITE)
 			draw_string(f, Vector2(60, 700), "هر روز ساعت ۰۰:۰۰ دوباره پر می‌شود.", HORIZONTAL_ALIGNMENT_CENTER, 600, 22, Color("#b9a8ff"))
 		"skins":
-			for i in SKINS.size():
+			for t in 3:
+				var tr := Rect2(Vector2(70 + t * 195, 292), Vector2(190, 40))
+				draw_rect(tr, Color("#3a2a7a") if store_tab == t else Color("#140d2b"))
+				draw_rect(tr, Color("#ffd166") if store_tab == t else Color("#3c2a6e"), false, 2.0)
+				draw_string(f, Vector2(tr.position.x, tr.position.y + 28), ["پوسته", "افکت", "قاب"][t], HORIZONTAL_ALIGNMENT_CENTER, 190, 22, Color.WHITE)
+			for i in 5:
 				var r := skin_rect(i)
-				var sel: bool = Save.skin == i
+				var items: Array = [SKINS, FX, FRAMES][store_tab]
+				var own: Array = [Save.owned, Save.owned_fx, Save.owned_frames][store_tab]
+				var cur: int = [Save.skin, Save.fx, Save.frame][store_tab]
+				var sel: bool = cur == i
 				draw_rect(r, Color("#3a2a7a") if sel else Color("#140d2b"))
 				draw_rect(r, Color("#ffd166") if sel else Color("#3c2a6e"), false, 2.0)
-				for j in 5:
-					draw_rect(Rect2(r.position + Vector2(16 + j * 36, 24), Vector2(30, 48)), Color(SKINS[i].colors[j]))
-				var st: String = "انتخاب‌شده" if sel else ("مال شماست" if Save.owned.has(i) else "%d سکه" % SKINS[i].cost)
-				draw_string(f, Vector2(r.position.x + 210, r.position.y + 58), "%s  -  %s" % [SKINS[i].name, st],
+				if store_tab == 0:
+					for j in 5:
+						draw_rect(Rect2(r.position + Vector2(16 + j * 36, 24), Vector2(30, 48)), Color(SKINS[i].colors[j]))
+				elif store_tab == 1:
+					_draw_fx(i, r.position + Vector2(90, 48), 0.6, Color("#ffd166"))
+				else:
+					_draw_frame(i, Rect2(r.position + Vector2(30, 18), Vector2(120, 60)), 0.0)
+				var st: String = "انتخاب‌شده" if sel else ("مال شماست" if own.has(i) else "%d سکه" % items[i].cost)
+				draw_string(f, Vector2(r.position.x + 210, r.position.y + 58), "%s  -  %s" % [items[i].name, st],
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
 		"shop":
 			for i in PACKS.size():
@@ -1269,12 +1442,18 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			if records_state != "ok":
 				draw_string(f, Vector2(0, 560), "در حال بارگذاری..." if records_state == "loading" else "دریافت رکوردها ممکن نشد", HORIZONTAL_ALIGNMENT_CENTER, 720, 26, Color("#d9d0ff"))
 			else:
-				for i in mini(records.size(), 10):
+				for i in mini(records.size(), 8):
 					var it: Dictionary = records[i]
-					var y := 420.0 + i * 48
-					draw_string(f, Vector2(80, y), "%d" % int(it.get("rank", i + 1)), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color("#ffd166"))
-					draw_string(f, Vector2(150, y), str(it.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color.WHITE)
-					draw_string(f, Vector2(450, y), "%d" % int(it.get("score", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 170, 26, Color("#d9d0ff"))
+					var cr := Rect2(Vector2(70, 380 + i * 92), Vector2(580, 80))
+					var rk := int(it.get("rank", i + 1))
+					var bc := [Color("#ffd166"), Color("#c0c7d6"), Color("#cd7f32")][rk - 1] if rk >= 1 and rk <= 3 else Color("#7b5cff")
+					draw_rect(cr, Color("#2a1f55"))
+					draw_rect(cr, bc, false, 3.0)
+					draw_rect(Rect2(cr.position + Vector2(6, 6), cr.size - Vector2(12, 12)), Color("#3c2a6e"), false, 1.0)
+					draw_circle(cr.position + Vector2(44, 40), 28, bc)
+					draw_string(f, cr.position + Vector2(16, 51), "%d" % rk, HORIZONTAL_ALIGNMENT_CENTER, 56, 30, Color("#140d2b"))
+					draw_string(f, cr.position + Vector2(90, 52), str(it.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, 320, 28, Color.WHITE)
+					draw_string(f, cr.position + Vector2(380, 52), "%d" % int(it.get("score", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 180, 30, Color("#ffd166"))
 		"sound":
 			_btn(Rect2(Vector2(100, 440), Vector2(520, 70)), "صدا: خاموش (لمس کن)" if Save.muted else "صدا: روشن (لمس کن)", Color("#140d2b"), 26)
 			var s := _slider_rect()

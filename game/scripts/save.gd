@@ -10,6 +10,10 @@ var volume := 0.8
 var skin := 0
 var owned: Array = [0]
 var avatar := 0
+var fx := 0
+var frame := 0
+var owned_fx: Array = [0]
+var owned_frames: Array = [0]
 var line_acc := 0
 var game: Dictionary = {}
 var daily_day := ""
@@ -26,6 +30,10 @@ func _ready() -> void:
 		skin = cf.get_value("player", "skin", 0)
 		owned = cf.get_value("player", "owned", [0])
 		avatar = cf.get_value("player", "avatar", 0)
+		fx = cf.get_value("player", "fx", 0)
+		frame = cf.get_value("player", "frame", 0)
+		owned_fx = cf.get_value("player", "owned_fx", [0])
+		owned_frames = cf.get_value("player", "owned_frames", [0])
 		line_acc = cf.get_value("player", "line_acc", 0)
 		game = cf.get_value("player", "game", {})
 		daily_day = cf.get_value("player", "daily_day", "")
@@ -64,6 +72,10 @@ func save() -> void:
 	cf.set_value("player", "skin", skin)
 	cf.set_value("player", "owned", owned)
 	cf.set_value("player", "avatar", avatar)
+	cf.set_value("player", "fx", fx)
+	cf.set_value("player", "frame", frame)
+	cf.set_value("player", "owned_fx", owned_fx)
+	cf.set_value("player", "owned_frames", owned_frames)
 	cf.set_value("player", "line_acc", line_acc)
 	cf.set_value("player", "game", game)
 	cf.set_value("player", "daily_day", daily_day)

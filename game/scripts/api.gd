@@ -90,6 +90,10 @@ func leaderboard() -> Dictionary:
 	return await _request("leaderboard", HTTPClient.METHOD_GET)
 
 
+func equip(kind: String, id: int) -> Dictionary:
+	return await _request("equip", HTTPClient.METHOD_POST, {"kind": kind, "id": id})
+
+
 func spend(amount: int, reason: String) -> Dictionary:
 	return await _request("spend", HTTPClient.METHOD_POST, {"amount": amount, "reason": reason})
 
