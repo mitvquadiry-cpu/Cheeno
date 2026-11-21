@@ -90,7 +90,7 @@ func _ready() -> void:
 	_make_sounds()
 	_apply_audio()
 	var ut := Timer.new()
-	ut.wait_time = 6.0
+	ut.wait_time = 4.0
 	ut.autostart = true
 	ut.timeout.connect(_poll_unread)
 	add_child(ut)
@@ -215,15 +215,15 @@ func top_btn(i: int) -> Rect2:
 
 
 func hint_rect() -> Rect2:
-	return Rect2(Vector2(40, 1100), Vector2(310, 68))
+	return Rect2(Vector2(40, 1084), Vector2(310, 56))
 
 
 func shuffle_rect() -> Rect2:
-	return Rect2(Vector2(370, 1100), Vector2(310, 68))
+	return Rect2(Vector2(370, 1084), Vector2(310, 56))
 
 
 func boom_rect() -> Rect2:
-	return Rect2(Vector2(260, 160), Vector2(200, 56))
+	return Rect2(Vector2(40, 1216), Vector2(310, 56))
 
 
 func _board_hit(p: Vector2) -> Vector2i:
@@ -235,8 +235,8 @@ func _board_hit(p: Vector2) -> Vector2i:
 	return Vector2i(c, r)
 
 
-func _explode(c: int, r: int) -> void:
-	if game_over:
+func _explode() -> void:
+	if game_over or busy:
 		return
 	if Api.token == "":
 		msg = "برای انفجار باید وارد حساب شوی"
@@ -245,12 +245,8 @@ func _explode(c: int, r: int) -> void:
 		_need_coins(BOOM_COST)
 		return
 	var cleared := 0
-	for dr in range(-1, 2):
-		for dc in range(-1, 2):
-			var cc := c + dc
-			var rr := r + dr
-			if cc < 0 or rr < 0 or cc >= n or rr >= n:
-				continue
+	for rr in n:
+		for cc in n:
 			var idx := rr * n + cc
 			if board[idx] != 0:
 				flashes.append({
@@ -262,17 +258,19 @@ func _explode(c: int, r: int) -> void:
 				board[idx] = 0
 				cleared += 1
 	history.clear()
-	msg = "انفجار: %d خانه پاک شد" % cleared
+	hint = {}
+	msg = "انفجار: کل صفحه پاک شد"
 	_play("clear")
 	_save_game()
+	queue_redraw()
 
 
 func undo_rect() -> Rect2:
-	return Rect2(Vector2(40, 1186), Vector2(310, 68))
+	return Rect2(Vector2(40, 1150), Vector2(310, 56))
 
 
 func rotate_rect() -> Rect2:
-	return Rect2(Vector2(370, 1186), Vector2(310, 68))
+	return Rect2(Vector2(370, 1150), Vector2(310, 56))
 
 
 func shop_rect() -> Rect2:
@@ -436,15 +434,7 @@ func _press(p: Vector2) -> void:
 		_shuffle()
 		return
 	if boom_rect().has_point(p):
-		boom_mode = not boom_mode
-		rot_mode = false
-		msg = "خانه‌ای از تخته را لمس کن تا منفجر شود (%d سکه)" % BOOM_COST if boom_mode else ""
-		_play("click")
-		return
-	if boom_mode and _board_hit(p) != Vector2i(-1, -1):
-		var bc := _board_hit(p)
-		boom_mode = false
-		_explode(bc.x, bc.y)
+		_explode()
 		return
 	msg = ""
 	hint = {}
@@ -1099,7 +1089,37 @@ func _find_hint() -> Dictionary:
 								free_nb += 1
 						if free_nb == 0:
 							holes += 1
+				# بافت: تعداد مرز بین خانه‌ی پر و خالی (کمتر = تمیزتر)
+				var edges := 0
+				for y in n:
+					for x in n:
+						if x + 1 < n and (sim[y * n + x] != 0) != (sim[y * n + x + 1] != 0):
+							edges += 1
+						if y + 1 < n and (sim[y * n + x] != 0) != (sim[(y + 1) * n + x] != 0):
+							edges += 1
+				# قطعه‌های دیگر دست بعد از این حرکت هنوز جا دارند؟
+				var fits := 0
+				var saved_board: Array = board
+				board = sim
+				for j in hand.size():
+					if j == i or hand[j] == null:
+						continue
+					var ok := false
+					for yy in n:
+						for xx in n:
+							if not ok and _can_place(hand[j].cells, Vector2i(xx, yy)):
+								ok = true
+					if ok:
+						fits += 1
+				board = saved_board
+				var others := 0
+				for j in hand.size():
+					if j != i and hand[j] != null:
+						others += 1
 				var sc: float = (rows_full.size() + cols_full.size()) * 100.0 - holes * 30.0 + hand[i].cells.size() * 0.5
+				sc -= edges * 1.5
+				sc -= (others - fits) * 80.0
+				sc += (rows_full.size() + cols_full.size() - 1) * 40.0 if rows_full.size() + cols_full.size() > 1 else 0.0
 				if sc > best_score:
 					best_score = sc
 					best = {"slot": i, "cell": Vector2i(c, r)}
@@ -1238,6 +1258,15 @@ func _poll_unread() -> void:
 		return
 	var c := int(r.data.get("count", 0))
 	var l := int(r.data.get("last_id", 0))
+	var bn = r.data.get("by_name", {})
+	Api.unread_by_name = bn if bn is Dictionary else {}
+	if r.data.has("balance") and not busy:
+		var nb := int(r.data.get("balance", 0))
+		if account_balance >= 0 and nb > account_balance:
+			msg = "%d سکه به حساب تو اضافه شد" % (nb - account_balance)
+			_play("clear")
+		account_balance = nb
+		queue_redraw()
 	if unread_last >= 0 and l > unread_last and c > 0:
 		_play("pick")
 	unread_last = l
@@ -1508,7 +1537,7 @@ func _draw() -> void:
 	var nm := "مهمان (لمس کن)" if Api.token == "" else account_name
 	draw_string(f, Vector2(0, 195), nm, HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#ffd166"))
 	var col := Color("#d9d0ff")
-	draw_string(f, Vector2(50, 232), "رکورد: %d" % maxi(Save.best_score, account_best), HORIZONTAL_ALIGNMENT_LEFT, 240, 26, col)
+	draw_string(f, Vector2(95, 232), "رکورد: %d" % maxi(Save.best_score, account_best), HORIZONTAL_ALIGNMENT_LEFT, 240, 26, col)
 	draw_string(f, Vector2(0, 232), "سکه: %d" % _coins(), HORIZONTAL_ALIGNMENT_CENTER, 720, 26, col)
 	draw_string(f, Vector2(420, 232), "امتیاز: %d" % score, HORIZONTAL_ALIGNMENT_RIGHT, 240, 26, col)
 
@@ -1571,7 +1600,7 @@ func _draw() -> void:
 	_btn(records_rect(), "رکوردها", Color("#140d2b"), 22)
 
 	if msg != "":
-		draw_string(f, Vector2(0, 1278), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#d9d0ff"))
+		draw_string(f, Vector2(0, 1296), msg, HORIZONTAL_ALIGNMENT_CENTER, 720, 22, Color("#d9d0ff"))
 
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, vp), Color(0, 0, 0, 0.75))

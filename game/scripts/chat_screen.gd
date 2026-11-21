@@ -14,6 +14,26 @@ var unlocked := false
 var current_with := ""
 
 
+var preview: PanelContainer
+var preview_lbl: Label
+
+
+func _process(_d: float) -> void:
+	if preview == null:
+		return
+	var fo := get_viewport().gui_get_focus_owner()
+	var kb := DisplayServer.virtual_keyboard_get_height()
+	if fo is LineEdit and kb > 0 and (fo as LineEdit).text != "":
+		var vs := get_viewport().get_visible_rect().size
+		var ratio := vs.y / maxf(1.0, float(DisplayServer.window_get_size().y))
+		preview_lbl.text = (fo as LineEdit).text
+		preview.size = Vector2(vs.x - 40, 0)
+		preview.position = Vector2(20, vs.y - kb * ratio - preview.size.y - 90)
+		preview.visible = true
+	else:
+		preview.visible = false
+
+
 func _ready() -> void:
 	# والد CanvasLayer است و اندازه ندارد؛ پس اندازه را صریح می‌دهیم (علت صفحه‌ی خالی)
 	var vs := get_viewport().get_visible_rect().size
@@ -25,11 +45,24 @@ func _ready() -> void:
 	bg.size = vs
 	add_child(bg)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	preview = PanelContainer.new()
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = Color("#4a35a8")
+	psb.set_corner_radius_all(14)
+	psb.set_content_margin_all(12)
+	preview.add_theme_stylebox_override("panel", psb)
+	preview_lbl = Label.new()
+	preview_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	preview_lbl.add_theme_font_size_override("font_size", 26)
+	preview.add_child(preview_lbl)
+	preview.visible = false
+	preview.z_index = 50
 	root = VBoxContainer.new()
 	root.position = Vector2(20, 90)
 	root.size = vs - Vector2(40, 110)
 	root.add_theme_constant_override("separation", 14)
 	add_child(root)
+	add_child(preview)
 
 	var top := HBoxContainer.new()
 	root.add_child(top)
@@ -266,13 +299,19 @@ func _show_threads() -> void:
 	go.pressed.connect(func(): _search(input.text.strip_edges(), list))
 	input.text_submitted.connect(func(t): _search(t.strip_edges(), list))
 
+	var fr: Dictionary = await Api.soc_friends()
+	var fset := {}
+	if fr.ok:
+		for f0 in fr.data.get("items", []):
+			fset[str(f0.get("name", ""))] = true
 	var r: Dictionary = await Api.chat_threads()
-	if r.ok:
+	if r.ok and is_inside_tree():
 		var its: Array = r.data.get("items", [])
 		if its.is_empty():
 			_empty_note(list, "هنوز گفتگویی نداری\nبالا نام یک بازیکن را جست‌وجو کن و شروع کن.")
 		for it in its:
-			_add_partner_button(list, str(it.get("name", "")))
+			var pn := str(it.get("name", ""))
+			_add_partner_button(list, pn, fr.ok and not fset.has(pn))
 
 
 func _search(q: String, list: VBoxContainer) -> void:
@@ -307,6 +346,17 @@ func _add_partner_button(list: VBoxContainer, partner: String, searched := false
 	n.custom_minimum_size.y = 64
 	n.pressed.connect(func(): _open_thread(partner))
 	row.add_child(n)
+	var uc := int(Api.unread_by_name.get(partner, 0))
+	if uc > 0:
+		var bd := Label.new()
+		bd.text = " %d " % mini(uc, 99)
+		bd.add_theme_font_size_override("font_size", 22)
+		var bsb := StyleBoxFlat.new()
+		bsb.bg_color = Color("#e5334b")
+		bsb.set_corner_radius_all(16)
+		bd.add_theme_stylebox_override("normal", bsb)
+		bd.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row.add_child(bd)
 	if searched:
 		var ab := Button.new()
 		ab.text = "افزودن دوست"
@@ -377,6 +427,20 @@ func _open_thread(partner: String) -> void:
 	cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cb.pressed.connect(func(): _call_start(partner))
 	acts.add_child(cb)
+	var afb := Button.new()
+	afb.text = "افزودن دوست"
+	_sbtn(afb, Color("#3a2a7a"))
+	afb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	afb.pressed.connect(func():
+		afb.disabled = true
+		var ar: Dictionary = await Api.soc_add(partner)
+		_set_status("به دوستان اضافه شد." if ar.ok else _err(ar, "اضافه نشد."))
+		if ar.ok:
+			afb.visible = false
+		else:
+			afb.disabled = false
+	)
+	acts.add_child(afb)
 
 	var msgs := VBoxContainer.new()
 	msgs.name = "Msgs"

@@ -187,6 +187,9 @@ func soc_call(action: String, data: Dictionary = {}) -> Dictionary:
 	return await _request("social/call", HTTPClient.METHOD_POST, data)
 
 
+var unread_by_name := {}
+
+
 func chat_unread() -> Dictionary:
 	return await _request("chat/unread", HTTPClient.METHOD_GET)
 
