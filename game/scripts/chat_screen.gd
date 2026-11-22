@@ -89,6 +89,7 @@ func _ready() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.scroll_deadzone = 40
+	scroll.name = "Scroll"
 	root.add_child(scroll)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -436,6 +437,9 @@ func _open_thread(partner: String) -> void:
 
 	var row := HBoxContainer.new()
 	content.add_child(row)
+	var pad := Control.new()
+	pad.custom_minimum_size = Vector2(0, 40)
+	content.add_child(pad)
 	var input := LineEdit.new()
 	input.max_length = MSG_MAX
 	input.placeholder_text = "پیام (حداکثر ۲۰۰ حرف، ۲ سکه)"
@@ -448,8 +452,21 @@ func _open_thread(partner: String) -> void:
 	row.add_child(send)
 	send.pressed.connect(func(): _send(input, send))
 	input.text_submitted.connect(func(_t): _send(input, send))
+	input.focus_entered.connect(func(): _to_bottom(true))
 
 	await _refresh_messages(msgs)
+	_to_bottom(true)
+
+
+func _to_bottom(delay := false) -> void:
+	var sc := root.get_node_or_null("Scroll") as ScrollContainer
+	if sc == null:
+		return
+	if delay:
+		await get_tree().create_timer(0.35).timeout
+	await get_tree().process_frame
+	if is_instance_valid(sc):
+		sc.scroll_vertical = int(sc.get_v_scroll_bar().max_value)
 
 
 func _refresh_messages(msgs: VBoxContainer) -> void:

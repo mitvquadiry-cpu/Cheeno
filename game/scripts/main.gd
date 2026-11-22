@@ -66,6 +66,8 @@ var game_over := false
 var flashes: Array = []
 var history: Array = []
 var hint := {}
+var hint_fails := 0
+var photo_zoom := false
 var msg := ""
 var pressed_pos := Vector2(-1, -1)
 var time := 0.0
@@ -369,6 +371,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 	# وقتی چت باز است، هیچ لمس یا کلیدی نباید به صفحه‌ی بازی برسد (مثلاً دکمه‌ی خروج)
 	if get_node_or_null("ChatLayer") != null:
 		return
+	if photo_zoom:
+		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
+			photo_zoom = false
+		return
 	var event := ev.duplicate()
 	if event is InputEventMouse:
 		event.position.y -= top_off
@@ -527,6 +533,9 @@ func _press_panel(p: Vector2) -> void:
 				if pack_rect(i).has_point(p):
 					_buy_pack(PACKS[i].id)
 		"profile":
+			if photo_tex and Api.token != "" and (p - Vector2(360, 440)).length() < 56:
+				photo_zoom = true
+				return
 			for i in AVATARS.size():
 				if Rect2(Vector2(70 + i * 95, 500), Vector2(80, 80)).has_point(p):
 					Save.avatar = i
@@ -1233,6 +1242,8 @@ func _find_hint() -> Dictionary:
 				if sc > best_score:
 					best_score = sc
 					best = {"slot": i, "cell": Vector2i(c, r)}
+	if best.is_empty() or best_score < -2500.0:
+		return {"fail": true}
 	return best
 
 
@@ -1285,9 +1296,16 @@ func _use_hint() -> void:
 	if game_over or not hint.is_empty():
 		return
 	var found := _find_hint()
-	if found.is_empty():
-		msg = "جای قانونی‌ای پیدا نشد"
+	if found.has("fail"):
+		hint_fails += 1
+		if hint_fails <= 2:
+			msg = "جایی برای همه‌ی کارت‌ها نیست؛ «تعویض کارت‌ها» را بزن"
+		elif hint_fails <= 3:
+			msg = "با تعویض هم جا نشد؛ «برگشت حرکت» را بزن"
+		else:
+			msg = "راه دیگری نیست؛ «انفجار» را بزن"
 		return
+	hint_fails = 0
 	if not await _pay_or_free("hint", HINT_COST, "hint"):
 		_need_coins(HINT_COST)
 		return
@@ -1773,6 +1791,19 @@ func _draw() -> void:
 		for v in hand[hint.slot].cells:
 			var cp: Vector2i = hint.cell + v
 			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
+
+	if photo_zoom and photo_tex:
+		var vz := get_viewport_rect().size
+		draw_rect(Rect2(Vector2.ZERO, vz), Color(0, 0, 0, 0.85), true)
+		var zr := minf(vz.x * 0.42, 300.0)
+		var zc := vz / 2.0
+		var zp := PackedVector2Array()
+		var zu := PackedVector2Array()
+		for k in 64:
+			var a := TAU * k / 64.0
+			zp.append(zc + Vector2(cos(a), sin(a)) * zr)
+			zu.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
+		draw_colored_polygon(zp, Color.WHITE, zu, photo_tex)
 
 	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
 	_btn(shuffle_rect(), "تعویض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)

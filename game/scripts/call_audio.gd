@@ -167,6 +167,12 @@ func stop() -> void:
 	if mic:
 		mic.stop()
 		mic.stream = null
+		mic.queue_free()
+		mic = null
+	var bi := AudioServer.get_bus_index("CallMic")
+	if bi >= 0:
+		AudioServer.remove_bus(bi)
+	cap = null
 	if out:
 		out.stop()
 	if ch:
