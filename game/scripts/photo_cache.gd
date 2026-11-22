@@ -96,11 +96,14 @@ func _draw() -> void:
 	draw_colored_polygon(pts, Color.WHITE, uvs, pic)
 
 
+static var viewer_open := false
+
 func _tap(e: InputEvent) -> void:
-	var hit: bool = (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
-	if not hit or pic == null:
+	var hit: bool = (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and not e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	if not hit or pic == null or viewer_open:
 		return
 	accept_event()
+	viewer_open = true
 	var layer := CanvasLayer.new()
 	layer.layer = 100
 	var bg := ColorRect.new()
@@ -116,5 +119,6 @@ func _tap(e: InputEvent) -> void:
 	bg.add_child(tr)
 	bg.gui_input.connect(func(ev: InputEvent):
 		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
+			viewer_open = false
 			layer.queue_free())
 	get_tree().root.add_child(layer)
