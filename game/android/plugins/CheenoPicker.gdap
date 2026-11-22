@@ -1,0 +1,12 @@
+[config]
+
+name="CheenoPicker"
+binary_type="local"
+binary="CheenoPicker.aar"
+
+[dependencies]
+
+local=[]
+remote=[]
+
+custom_maven_repos=[]
