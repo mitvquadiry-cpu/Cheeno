@@ -24,7 +24,15 @@ func _process(_d: float) -> void:
 		return
 	var fo := get_viewport().gui_get_focus_owner()
 	var kb := DisplayServer.virtual_keyboard_get_height()
-	if fo is LineEdit and kb > 0 and (fo as LineEdit).text != "":
+	if root != null:
+		var vs0 := get_viewport().get_visible_rect().size
+		var r0 := vs0.y / maxf(1.0, float(DisplayServer.window_get_size().y))
+		var lift := kb * r0 if kb > 0 else 0.0
+		var nh := vs0.y - 110 - lift
+		if absf(root.size.y - nh) > 1.0:
+			root.size = Vector2(vs0.x - 40, nh)
+			_to_bottom(true)
+	if false and fo is LineEdit and kb > 0 and (fo as LineEdit).text != "":
 		var vs := get_viewport().get_visible_rect().size
 		var ratio := vs.y / maxf(1.0, float(DisplayServer.window_get_size().y))
 		preview_lbl.text = (fo as LineEdit).text
@@ -793,7 +801,7 @@ func _call_tick_ui() -> void:
 		cl.text = "هزینه‌ی تماس با تماس‌گیرنده است"
 	var st := "صدا: وصل نشده"
 	if audio and is_instance_valid(audio):
-		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f تلاش %d" % [audio.sent, audio.recv, audio.peak, audio.retries]) if audio.connected else "صدا: در حال اتصال..."
+		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f تلاش %d" % [audio.sent, audio.recv, audio.peak, audio.retries]) if audio.connected else ("صدا: در حال اتصال... (%d/%d)" % [audio.pc.get_connection_state(), audio.pc.get_gathering_state()])
 	else:
 		st = "صدا: غیرفعال"
 	cl.text += "\n" + st
