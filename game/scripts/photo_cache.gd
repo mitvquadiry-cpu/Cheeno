@@ -59,7 +59,8 @@ static func make(name_: String, s := 56) -> PhotoCache:
 	c.sz = float(s)
 	c.custom_minimum_size = Vector2(s, s)
 	c.tint = Color.from_hsv(float(abs(name_.hash()) % 360) / 360.0, 0.55, 0.85)
-	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.mouse_filter = Control.MOUSE_FILTER_STOP
+	c.gui_input.connect(c._tap)
 	var u := str(urls.get(name_, ""))
 	if u != "" and tex.has(u):
 		c.pic = tex[u]
@@ -93,3 +94,27 @@ func _draw() -> void:
 		pts.append(c + Vector2(cos(a), sin(a)) * r)
 		uvs.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
 	draw_colored_polygon(pts, Color.WHITE, uvs, pic)
+
+
+func _tap(e: InputEvent) -> void:
+	var hit := (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	if not hit or pic == null:
+		return
+	accept_event()
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.9)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var tr := TextureRect.new()
+	tr.texture = pic
+	tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_child(tr)
+	bg.gui_input.connect(func(ev: InputEvent):
+		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
+			layer.queue_free())
+	get_tree().root.add_child(layer)
