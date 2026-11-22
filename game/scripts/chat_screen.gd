@@ -604,6 +604,7 @@ func _friend_action(k: int, nm: String) -> void:
 func _popup(title: String) -> VBoxContainer:
 	var old := get_node_or_null("Popup")
 	if old:
+		old.name = "PopupOld"
 		old.queue_free()
 	var dim := ColorRect.new()
 	dim.name = "Popup"
@@ -623,6 +624,7 @@ func _popup(title: String) -> VBoxContainer:
 func _close_popup() -> void:
 	var p := get_node_or_null("Popup")
 	if p:
+		p.name = "PopupOld"
 		p.queue_free()
 
 
@@ -770,6 +772,12 @@ func _call_tick_ui() -> void:
 		cl.text = "موجودی: %d سکه\nمصرف: ۱۰ سکه در دقیقه (تا الان %d)" % [maxi(0, friends_balance - spent), spent]
 	else:
 		cl.text = "هزینه‌ی تماس با تماس‌گیرنده است"
+	var st := "صدا: وصل نشده"
+	if audio and is_instance_valid(audio):
+		st = "صدا: وصل شد" if audio.connected else "صدا: در حال اتصال..."
+	else:
+		st = "صدا: غیرفعال"
+	cl.text += "\n" + st
 
 
 func _call_loop(is_caller: bool) -> void:
