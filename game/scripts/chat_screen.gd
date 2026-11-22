@@ -41,7 +41,7 @@ func _ready() -> void:
 	size = vs
 	custom_minimum_size = vs
 	var bg := ColorRect.new()
-	bg.color = Color("#140d2b")
+	bg.color = Color("#0e1621")
 	bg.size = vs
 	add_child(bg)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -481,8 +481,32 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		var wrap := HBoxContainer.new()
 		wrap.alignment = BoxContainer.ALIGNMENT_END if mine else BoxContainer.ALIGNMENT_BEGIN
 		msgs.add_child(wrap)
-		var bub := _card(wrap, box, Color("#4a35a8") if mine else Color("#2a1f55"))
-		bub.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_SHRINK_BEGIN
+		var col := Color("#2b5278") if mine else Color("#182533")
+		var bp := PanelContainer.new()
+		var bs := StyleBoxFlat.new()
+		bs.bg_color = col
+		bs.set_corner_radius_all(22)
+		if mine:
+			bs.corner_radius_bottom_right = 5
+		else:
+			bs.corner_radius_bottom_left = 5
+		bs.content_margin_left = 18
+		bs.content_margin_right = 18
+		bs.content_margin_top = 10
+		bs.content_margin_bottom = 8
+		bp.add_theme_stylebox_override("panel", bs)
+		var tm := Time.get_datetime_dict_from_unix_time(int(m.get("time", 0)) + 12600)
+		var tl := _label("%02d:%02d" % [tm.hour, tm.minute], 16)
+		tl.modulate = Color(1, 1, 1, 0.55)
+		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var bv := VBoxContainer.new()
+		bv.add_theme_constant_override("separation", 2)
+		box.get_parent()
+		bv.add_child(box)
+		bv.add_child(tl)
+		bp.add_child(bv)
+		bp.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_SHRINK_BEGIN
+		wrap.add_child(bp)
 
 
 func _live_loop(partner: String) -> void:
@@ -663,6 +687,7 @@ func _call_start(nm: String) -> void:
 		_set_status(_err(r2, "تماس برقرار نشد."))
 		return
 	call_id = int(r2.data.get("id", 0))
+	call_ready = false
 	_audio_start(true)
 	_ring("back")
 	_call_ui("در حال زنگ زدن به " + nm + "...", false)
@@ -671,6 +696,21 @@ func _call_start(nm: String) -> void:
 
 func _call_ui(t: String, incoming: bool) -> void:
 	var v := _popup(t)
+	var cardp := v.get_parent() as Control
+	cardp.position = Vector2(30, 160)
+	cardp.size = Vector2(size.x - 60, 900)
+	(v.get_child(0) as Label).add_theme_font_size_override("font_size", 40)
+	(v.get_child(0) as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var big := _label("00:00", 90)
+	big.name = "CallTimer"
+	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(big)
+	var cl := _label("", 30)
+	cl.name = "CallCoins"
+	cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cl.modulate = Color("#ffd166")
+	v.add_child(cl)
+	_call_tick_ui()
 	if incoming:
 		var ac := Button.new()
 		ac.text = "پاسخ"
@@ -680,6 +720,7 @@ func _call_ui(t: String, incoming: bool) -> void:
 			incoming_ringing = false
 			if r.ok:
 				_ring("")
+				call_t0 = Time.get_ticks_msec()
 				_audio_start(false)
 				_call_ui("تماس برقرار است", false)
 				_call_loop(false)
@@ -701,15 +742,52 @@ func _call_ui(t: String, incoming: bool) -> void:
 	v.add_child(en)
 
 
+var call_t0 := 0
+var call_ready := false
+var _loop_n := 0
+var call_caller := false
+
+
+func _call_tick_ui() -> void:
+	var p := get_node_or_null("Popup")
+	if p == null:
+		return
+	var tl := p.find_child("CallTimer", true, false) as Label
+	var cl := p.find_child("CallCoins", true, false) as Label
+	if tl == null or cl == null:
+		return
+	var sec := 0
+	if call_t0 > 0:
+		sec = (Time.get_ticks_msec() - call_t0) / 1000
+	tl.text = "%02d:%02d" % [sec / 60, sec % 60]
+	if call_caller:
+		var spent := int(ceil(sec / 60.0)) * 10 if sec > 0 else 0
+		cl.text = "موجودی: %d سکه\nمصرف: ۱۰ سکه در دقیقه (تا الان %d)" % [maxi(0, friends_balance - spent), spent]
+	else:
+		cl.text = "هزینه‌ی تماس با تماس‌گیرنده است"
+
+
 func _call_loop(is_caller: bool) -> void:
 	call_active = true
+	call_caller = is_caller
+	if is_caller:
+		call_t0 = 0
 	while call_active and is_inside_tree():
-		await get_tree().create_timer(3.0).timeout
+		await get_tree().create_timer(1.0).timeout
+		_call_tick_ui()
+		if call_t0 == 0 and (not is_caller or call_ready):
+			call_t0 = Time.get_ticks_msec()
+		_loop_n += 1
+		if _loop_n % 3 != 0:
+			continue
+	while call_active and is_inside_tree():
 		if not call_active or not is_inside_tree():
 			return
 		var r: Dictionary = await Api.soc_call("tick" if is_caller else "poll", {"id": call_id})
 		if r.ok and r.data.get("state", "") in ["active", "ended"]:
 			_ring("")
+			if r.data.get("state", "") == "active":
+				call_ready = true
 		if r.ok and r.data.get("state", "") == "ended":
 			call_active = false
 			_audio_stop()
