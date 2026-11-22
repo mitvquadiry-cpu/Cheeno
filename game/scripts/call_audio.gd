@@ -53,10 +53,6 @@ func start(id: int, caller: bool) -> bool:
 
 
 func _setup_audio() -> void:
-	if Engine.has_singleton("CheenoPicker"):
-		nat = Engine.get_singleton("CheenoPicker")
-		_setup_out()
-		return
 	var bi := AudioServer.get_bus_index("CallMic")
 	if bi < 0:
 		AudioServer.add_bus()
@@ -124,15 +120,6 @@ func _process(_dt: float) -> void:
 				mic_fixed = true
 				mic.stop()
 				mic.play()
-	if nat == null and mic_fixed and peak < 0.0005:
-		_dead += _dt
-		if _dead > 2.0 and retries < 6:
-			_dead = 0.0
-			retries += 1
-			mic.stop()
-			AudioServer.set_input_device("Default")
-			mic.stream = AudioStreamMicrophone.new()
-			mic.play()
 	if ch.get_ready_state() != WebRTCDataChannel.STATE_OPEN:
 		return
 	connected = true
