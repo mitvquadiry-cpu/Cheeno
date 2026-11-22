@@ -76,7 +76,7 @@ jobs:
             -d /tmp/cp/classes $(find android/plugin_src -name '*.java')
           (cd /tmp/cp/classes && jar cf /tmp/cp/classes.jar .)
           mkdir -p /tmp/aar && cp /tmp/cp/classes.jar /tmp/aar/classes.jar
-          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ir.donitoo.cheeno.picker"/>' > /tmp/aar/AndroidManifest.xml
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ir.donitoo.cheeno.picker"><application><meta-data android:name="org.godotengine.plugin.v2.CheenoPicker" android:value="ir.donitoo.cheeno.CheenoPicker"/></application></manifest>' > /tmp/aar/AndroidManifest.xml
           (cd /tmp/aar && zip -q -r /tmp/CheenoPicker.aar classes.jar AndroidManifest.xml)
           cp /tmp/CheenoPicker.aar android/plugins/CheenoPicker.aar
           ls -l android/plugins
