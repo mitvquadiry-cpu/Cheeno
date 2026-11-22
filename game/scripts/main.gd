@@ -2,6 +2,7 @@ extends Node2D
 
 # Cheeno: پازل بلوکی. تخته از ۶×۶ شروع می‌شود و تا ۱۰×۱۰ بزرگ می‌شود.
 
+const PhotoC := preload("res://scripts/photo_cache.gd")
 const MIN_N := 6
 const MAX_N := 10
 const BOARD_PX := 600.0
@@ -988,7 +989,7 @@ func _load_records() -> void:
 		for it in records:
 			var u := str(it.get("photo", ""))
 			if u != "":
-				var t: Texture2D = await PhotoCache.get_tex(self, u)
+				var t: Texture2D = await PhotoC.get_tex(self, u)
 				if t:
 					rec_tex[u] = t
 					queue_redraw()

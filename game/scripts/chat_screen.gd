@@ -3,6 +3,7 @@ extends Control
 # صفحه‌ی چت خصوصی. همه‌ی UI در کد ساخته می‌شود تا نیازی به تغییر main.tscn نباشد.
 # نام‌ها و پیام‌ها فقط از سرور می‌آیند؛ سرور همه‌ی قوانین (سکه، بلاک، محدودیت) را چک می‌کند.
 
+const PhotoC := preload("res://scripts/photo_cache.gd")
 const NAME_MAX := 40
 const MSG_MAX := 200
 
@@ -148,7 +149,7 @@ func _sinput(e: LineEdit) -> void:
 
 
 func _avatar_circle(name_: String, sz := 56) -> Control:
-	return PhotoCache.make(name_, sz)
+	return PhotoC.make(name_, sz)
 
 func _empty_note(parent: Control, t: String) -> void:
 	var l := _label(t, 22)
@@ -496,8 +497,12 @@ func _refresh_messages(msgs: VBoxContainer) -> void:
 		bs.content_margin_bottom = 8
 		bp.add_theme_stylebox_override("panel", bs)
 		var tm := Time.get_datetime_dict_from_unix_time(int(m.get("time", 0)) + 12600)
-		var tl := _label("%02d:%02d" % [tm.hour, tm.minute], 16)
-		tl.modulate = Color(1, 1, 1, 0.55)
+		var tstr := "%02d:%02d" % [tm.hour, tm.minute]
+		var is_read: bool = mine and m.get("read", false)
+		if mine:
+			tstr += "  ✓✓" if is_read else "  ✓"
+		var tl := _label(tstr, 16)
+		tl.modulate = Color(0.55, 0.85, 1, 0.95) if is_read else Color(1, 1, 1, 0.55)
 		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		var bv := VBoxContainer.new()
 		bv.add_theme_constant_override("separation", 2)
