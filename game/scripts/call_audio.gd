@@ -130,7 +130,8 @@ func _process(_dt: float) -> void:
 	connected = true
 	# ارسال
 	if nat != null and nat_on:
-		var raw: PackedByteArray = nat.recRead()
+		var b64 := str(nat.recRead())
+		var raw: PackedByteArray = Marshalls.base64_to_raw(b64) if b64 != "" else PackedByteArray()
 		for i in raw.size() / 2:
 			var fv := float(raw.decode_s16(i * 2)) / 32768.0
 			peak = maxf(peak, absf(fv))
