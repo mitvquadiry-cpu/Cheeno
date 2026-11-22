@@ -16,6 +16,8 @@ var sendbuf := PackedFloat32Array()
 var phase := 0.0
 var mic_fixed := false
 var _chk := 0.0
+var _dead := 0.0
+var retries := 0
 var sent := 0
 var recv := 0
 var peak := 0.0
@@ -106,6 +108,15 @@ func _process(_dt: float) -> void:
 				mic_fixed = true
 				mic.stop()
 				mic.play()
+	if mic_fixed and peak < 0.0005:
+		_dead += _dt
+		if _dead > 2.0 and retries < 6:
+			_dead = 0.0
+			retries += 1
+			mic.stop()
+			AudioServer.set_input_device("Default")
+			mic.stream = AudioStreamMicrophone.new()
+			mic.play()
 	if ch.get_ready_state() != WebRTCDataChannel.STATE_OPEN:
 		return
 	connected = true
@@ -140,6 +151,11 @@ func _process(_dt: float) -> void:
 
 func stop() -> void:
 	running = false
+	if mic:
+		mic.stop()
+		mic.stream = null
+	if out:
+		out.stop()
 	if ch:
 		ch.close()
 	if pc:

@@ -774,7 +774,7 @@ func _call_tick_ui() -> void:
 		cl.text = "هزینه‌ی تماس با تماس‌گیرنده است"
 	var st := "صدا: وصل نشده"
 	if audio and is_instance_valid(audio):
-		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f" % [audio.sent, audio.recv, audio.peak]) if audio.connected else "صدا: در حال اتصال..."
+		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f تلاش %d" % [audio.sent, audio.recv, audio.peak, audio.retries]) if audio.connected else "صدا: در حال اتصال..."
 	else:
 		st = "صدا: غیرفعال"
 	cl.text += "\n" + st
