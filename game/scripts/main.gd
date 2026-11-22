@@ -568,6 +568,8 @@ func _press_panel(p: Vector2) -> void:
 		"codes":
 			if Rect2(Vector2(110, 780), Vector2(500, 56)).has_point(p):
 				_open_grant()
+			elif Rect2(Vector2(110, 710), Vector2(500, 56)).has_point(p):
+				_open_scores()
 			elif Rect2(Vector2(110, 850), Vector2(500, 56)).has_point(p):
 				panel = "newcode"
 				name_text = ""
@@ -647,6 +649,89 @@ func _open_grant() -> void:
 	cl.pressed.connect(func(): layer.queue_free())
 	box.add_child(cl)
 	add_child(layer)
+
+
+func _open_scores() -> void:
+	if get_node_or_null("ScoresLayer") != null:
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "ScoresLayer"
+	layer.layer = 60
+	var bg := ColorRect.new()
+	bg.color = Color("#140d2b")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var root := VBoxContainer.new()
+	root.position = Vector2(30, 60)
+	root.custom_minimum_size = Vector2(660, 0)
+	root.add_theme_constant_override("separation", 12)
+	layer.add_child(root)
+	var t := Label.new()
+	t.text = "مدیریت رکوردها"
+	t.add_theme_font_size_override("font_size", 38)
+	root.add_child(t)
+	var msg := Label.new()
+	msg.add_theme_font_size_override("font_size", 24)
+	root.add_child(msg)
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(660, 900)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(sc)
+	var list := VBoxContainer.new()
+	list.custom_minimum_size = Vector2(640, 0)
+	list.add_theme_constant_override("separation", 10)
+	sc.add_child(list)
+	var cl := Button.new()
+	cl.text = "بستن"
+	cl.custom_minimum_size = Vector2(660, 80)
+	cl.add_theme_font_size_override("font_size", 30)
+	cl.pressed.connect(func(): layer.queue_free())
+	root.add_child(cl)
+	add_child(layer)
+	msg.text = "..."
+	var r: Dictionary = await Api.admin_scores()
+	if not r.ok:
+		msg.text = str(r.data.get("message", "خطا"))
+		return
+	msg.text = "نام، رکورد و دکمه‌ی ذخیره (۰ = حذف رکورد)"
+	var n := 0
+	for it in r.data.get("items", []):
+		n += 1
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var nl := Label.new()
+		nl.text = "%d. %s" % [n, str(it.get("name", ""))]
+		nl.custom_minimum_size = Vector2(300, 0)
+		nl.clip_text = true
+		nl.add_theme_font_size_override("font_size", 26)
+		row.add_child(nl)
+		var le := LineEdit.new()
+		le.text = str(int(it.get("score", 0)))
+		le.custom_minimum_size = Vector2(170, 64)
+		le.add_theme_font_size_override("font_size", 26)
+		row.add_child(le)
+		var sv := Button.new()
+		sv.text = "ذخیره"
+		sv.custom_minimum_size = Vector2(120, 64)
+		var uid := int(it.get("id", 0))
+		sv.pressed.connect(func():
+			sv.disabled = true
+			var rr: Dictionary = await Api.admin_set_score(uid, maxi(0, int(le.text)))
+			sv.disabled = false
+			msg.text = "ذخیره شد ✓" if rr.ok else str(rr.data.get("message", "انجام نشد"))
+		)
+		row.add_child(sv)
+		var dl := Button.new()
+		dl.text = "حذف"
+		dl.custom_minimum_size = Vector2(90, 64)
+		dl.pressed.connect(func():
+			var rr: Dictionary = await Api.admin_set_score(uid, 0)
+			if rr.ok:
+				row.queue_free()
+				msg.text = "رکورد حذف شد"
+		)
+		row.add_child(dl)
+		list.add_child(row)
 
 
 func _load_codes() -> void:
@@ -1825,11 +1910,12 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			for i in rpad.size():
 				_btn(_pad_rect(i), rpad[i], Color("#2a1f55"), 30)
 		"codes":
-			for i in mini(codes_list.size(), 8):
+			for i in mini(codes_list.size(), 5):
 				var c: Dictionary = codes_list[i]
 				var y := 410.0 + i * 54
 				draw_string(f, Vector2(70, y), "%s  %s" % [str(c.get("alias", "")), str(c.get("code", ""))], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
 				draw_string(f, Vector2(70, y + 26), "%d نفر  |  خرید کل: %d سکه" % [int(c.get("count", 0)), int(c.get("total", 0))], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("#d9d0ff"))
+			_btn(Rect2(Vector2(110, 710), Vector2(500, 56)), "مدیریت رکوردها", Color("#b8741a"), 26)
 			_btn(Rect2(Vector2(110, 780), Vector2(500, 56)), "اهدای سکه به کاربر", Color("#1f8a55"), 26)
 			_btn(Rect2(Vector2(110, 850), Vector2(500, 56)), "ساخت کد جدید", Color("#3a2a7a"), 26)
 		"newcode":

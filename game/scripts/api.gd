@@ -201,3 +201,11 @@ func admin_grant(target: String, amount: int, note: String) -> Dictionary:
 
 func upload_photo(jpg: PackedByteArray) -> Dictionary:
 	return await _request("photo", HTTPClient.METHOD_POST, {"image": Marshalls.raw_to_base64(jpg)})
+
+
+func admin_scores() -> Dictionary:
+	return await _request("admin/scores", HTTPClient.METHOD_GET)
+
+
+func admin_set_score(id: int, score: int) -> Dictionary:
+	return await _request("admin/score", HTTPClient.METHOD_POST, {"id": id, "score": score})
