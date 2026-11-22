@@ -45,6 +45,10 @@ func start(id: int, caller: bool) -> bool:
 		_send({"k": "sd", "t": t, "s": sdp}))
 	pc.ice_candidate_created.connect(func(m: String, i: int, n: String):
 		_send({"k": "ic", "m": m, "i": i, "n": n}))
+	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
+		var pk = Engine.get_singleton("CheenoPicker")
+		if pk.has_method("recStart"):
+			nat = pk
 	_setup_audio()
 	running = true
 	if caller:
@@ -66,11 +70,12 @@ func _setup_audio() -> void:
 		AudioServer.add_bus_effect(bi, am)
 	else:
 		cap = AudioServer.get_bus_effect(bi, 0)
-	mic = AudioStreamPlayer.new()
-	mic.stream = AudioStreamMicrophone.new()
-	mic.bus = "CallMic"
-	add_child(mic)
-	mic.play()
+	if nat == null:
+		mic = AudioStreamPlayer.new()
+		mic.stream = AudioStreamMicrophone.new()
+		mic.bus = "CallMic"
+		add_child(mic)
+		mic.play()
 	_setup_out()
 
 
@@ -160,6 +165,11 @@ func _process(_dt: float) -> void:
 		for i in n:
 			var v := float(pk.decode_s16(i * 2)) / 32768.0
 			gen.push_frame(Vector2(v, v))
+
+
+func _exit_tree() -> void:
+	if nat != null:
+		nat.recStop()
 
 
 func stop() -> void:
