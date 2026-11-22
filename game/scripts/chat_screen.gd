@@ -783,12 +783,11 @@ func _call_loop(is_caller: bool) -> void:
 		if call_t0 == 0 and (not is_caller or call_ready):
 			call_t0 = Time.get_ticks_msec()
 		_loop_n += 1
-		if _loop_n % 3 != 0:
+		if _loop_n % 3 != 0 or not call_active:
 			continue
-	while call_active and is_inside_tree():
-		if not call_active or not is_inside_tree():
-			return
 		var r: Dictionary = await Api.soc_call("tick" if is_caller else "poll", {"id": call_id})
+		if not call_active:
+			return
 		if r.ok and r.data.get("state", "") in ["active", "ended"]:
 			_ring("")
 			if r.data.get("state", "") == "active":

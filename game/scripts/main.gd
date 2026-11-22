@@ -560,7 +560,7 @@ func _press_panel(p: Vector2) -> void:
 				_login_step()
 		"name":
 			_name_pad(p)
-			if Rect2(Vector2(110, 836), Vector2(500, 56)).has_point(p):
+			if Rect2(Vector2(110, 910), Vector2(500, 56)).has_point(p):
 				_name_save()
 		"redeem":
 			_login_pad(p)

@@ -14,6 +14,8 @@ var out: AudioStreamPlayer
 var gen: AudioStreamGeneratorPlayback
 var sendbuf := PackedFloat32Array()
 var phase := 0.0
+var mic_fixed := false
+var _chk := 0.0
 signal failed
 
 
@@ -91,6 +93,14 @@ func _process(_dt: float) -> void:
 	if not running or pc == null:
 		return
 	pc.poll()
+	if not mic_fixed:
+		_chk += _dt
+		if _chk > 1.0:
+			_chk = 0.0
+			if OS.get_name() != "Android" or "android.permission.RECORD_AUDIO" in OS.get_granted_permissions():
+				mic_fixed = true
+				mic.stop()
+				mic.play()
 	if ch.get_ready_state() != WebRTCDataChannel.STATE_OPEN:
 		return
 	connected = true
