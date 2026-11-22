@@ -45,25 +45,41 @@ public class CheenoPicker extends GodotPlugin {
     private AudioRecord rec;
     private final Object recLock = new Object();
 
+    private String recInfo = "none";
+
+    @UsedByGodot
+    public String recInfo() { return recInfo; }
+
     @UsedByGodot
     public boolean recStart() {
         synchronized (recLock) {
             if (rec != null) return true;
-            try {
-                int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-                if (min <= 0) return false;
-                AudioRecord r = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, 16000,
-                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, min * 4);
-                if (r.getState() != AudioRecord.STATE_INITIALIZED) {
-                    r.release();
-                    return false;
+            int[] srcs = new int[]{MediaRecorder.AudioSource.MIC, MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.DEFAULT};
+            for (int src : srcs) {
+                try {
+                    int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+                    if (min <= 0) { recInfo = "minbuf" + min; continue; }
+                    AudioRecord r = new AudioRecord(src, 16000,
+                            AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, min * 4);
+                    if (r.getState() != AudioRecord.STATE_INITIALIZED) {
+                        r.release();
+                        recInfo = "init-fail" + src;
+                        continue;
+                    }
+                    r.startRecording();
+                    if (r.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                        r.release();
+                        recInfo = "nostart" + src;
+                        continue;
+                    }
+                    rec = r;
+                    recInfo = "ok" + src;
+                    return true;
+                } catch (Throwable t) {
+                    recInfo = "err:" + t.getClass().getSimpleName();
                 }
-                r.startRecording();
-                rec = r;
-                return true;
-            } catch (Throwable t) {
-                return false;
             }
+            return false;
         }
     }
 
