@@ -47,8 +47,7 @@ func start(id: int, caller: bool) -> bool:
 		_send({"k": "ic", "m": m, "i": i, "n": n}))
 	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
 		var pk = Engine.get_singleton("CheenoPicker")
-		if pk.has_method("recStart"):
-			nat = pk
+		nat = pk
 	_setup_audio()
 	running = true
 	if caller:
