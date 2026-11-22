@@ -873,6 +873,8 @@ func _call_tick_ui() -> void:
 		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f تلاش %d" % [audio.sent, audio.recv, audio.peak, audio.retries]) if audio.connected else ("صدا: در حال اتصال... (%d/%d)" % [audio.pc.get_connection_state(), audio.pc.get_gathering_state()])
 	else:
 		st = "صدا: غیرفعال"
+	if audio and is_instance_valid(audio):
+		st += "\nمیک: " + (str(audio.nat.recInfo()) + (" روشن" if audio.nat_on else " خاموش") if audio.nat != null else "بدون پلاگین")
 	cl.text += "\n" + st
 
 
