@@ -39,6 +39,56 @@ public class CheenoPicker extends GodotPlugin {
         return s;
     }
 
+    private android.media.AudioRecord rec;
+
+    @UsedByGodot
+    public boolean recStart() {
+        try {
+            recStop();
+            int min = android.media.AudioRecord.getMinBufferSize(16000,
+                android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT);
+            rec = new android.media.AudioRecord(android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION, 16000,
+                android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, Math.max(min, 16000));
+            if (rec.getState() != android.media.AudioRecord.STATE_INITIALIZED) {
+                rec.release();
+                rec = null;
+                return false;
+            }
+            rec.startRecording();
+            return true;
+        } catch (Exception e) {
+            rec = null;
+            return false;
+        }
+    }
+
+    @UsedByGodot
+    public byte[] recRead() {
+        try {
+            if (rec == null) return new byte[0];
+            byte[] b = new byte[3200];
+            int n = rec.read(b, 0, b.length, android.media.AudioRecord.READ_NON_BLOCKING);
+            if (n <= 0) return new byte[0];
+            byte[] r = new byte[n];
+            System.arraycopy(b, 0, r, 0, n);
+            return r;
+        } catch (Exception e) {
+            return new byte[0];
+        }
+    }
+
+    @UsedByGodot
+    public void recStop() {
+        try {
+            if (rec != null) {
+                rec.stop();
+                rec.release();
+            }
+        } catch (Exception e) {
+        }
+        rec = null;
+    }
+
     @UsedByGodot
     public void pick() {
         final Activity a = getActivity();
