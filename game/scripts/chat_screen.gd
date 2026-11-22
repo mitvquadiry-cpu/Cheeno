@@ -16,10 +16,73 @@ var current_with := ""
 
 
 var preview: PanelContainer
+var chat_bg: Control
+var bg_idx := 0
+const BG_THEMES := [
+	{"name": "کهکشان", "c": ["#0b0320", "#2a0f5c", "#0a1a3d"], "star": Color(1, 1, 1, 0.85)},
+	{"name": "غروب", "c": ["#2b0a2e", "#8a2c3c", "#f08a4b"], "star": Color(1, 0.85, 0.5, 0.6)},
+	{"name": "اقیانوس", "c": ["#021a24", "#063c4d", "#0f6f74"], "star": Color(0.6, 1, 0.95, 0.5)},
+	{"name": "جنگل شب", "c": ["#04140b", "#0d3320", "#1d5a3a"], "star": Color(0.9, 1, 0.7, 0.7)},
+	{"name": "طلایی لوکس", "c": ["#120c02", "#3d2a06", "#7a5612"], "star": Color(1, 0.9, 0.5, 0.8)},
+]
+var _stars: Array = []
 var preview_lbl: Label
 
 
+func _bg_load() -> void:
+	var cf := ConfigFile.new()
+	if cf.load("user://chat_bg.cfg") == OK:
+		bg_idx = clampi(int(cf.get_value("bg", "idx", 0)), 0, BG_THEMES.size() - 1)
+	_bg_apply()
+
+
+func _bg_apply() -> void:
+	var th: Dictionary = BG_THEMES[bg_idx]
+	var cols: Array = th.c
+	var g := Gradient.new()
+	g.set_color(0, Color(cols[0]))
+	g.set_color(1, Color(cols[2]))
+	g.add_point(0.5, Color(cols[1]))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.25)
+	gt.fill_to = Vector2(1.0, 1.0)
+	gt.width = 512
+	gt.height = 512
+	chat_bg.set_meta("tex", gt)
+	chat_bg.set_meta("star", th.star)
+	_stars.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = bg_idx * 7919 + 1
+	for i in 90:
+		_stars.append([Vector2(rng.randf(), rng.randf()), rng.randf_range(1.0, 3.2), rng.randf()])
+	chat_bg.queue_redraw()
+
+
+func _draw_bg() -> void:
+	var sz := chat_bg.size
+	var gt: Texture2D = chat_bg.get_meta("tex")
+	chat_bg.draw_texture_rect(gt, Rect2(Vector2.ZERO, sz), false)
+	var sc: Color = chat_bg.get_meta("star")
+	var t := Time.get_ticks_msec() / 1000.0
+	for s in _stars:
+		var a: float = sc.a * (0.45 + 0.55 * sin(t * 1.5 + s[2] * 6.28))
+		chat_bg.draw_circle(s[0] * sz, s[1], Color(sc.r, sc.g, sc.b, a))
+
+
+func _bg_cycle() -> void:
+	bg_idx = (bg_idx + 1) % BG_THEMES.size()
+	var cf := ConfigFile.new()
+	cf.set_value("bg", "idx", bg_idx)
+	cf.save("user://chat_bg.cfg")
+	_bg_apply()
+	_set_status("پس‌زمینه: " + str(BG_THEMES[bg_idx].name))
+
+
 func _process(_d: float) -> void:
+	if chat_bg and is_instance_valid(chat_bg):
+		chat_bg.queue_redraw()
 	if preview == null:
 		return
 	var fo := get_viewport().gui_get_focus_owner()
@@ -49,10 +112,11 @@ func _ready() -> void:
 	position = Vector2.ZERO
 	size = vs
 	custom_minimum_size = vs
-	var bg := ColorRect.new()
-	bg.color = Color("#0e1621")
-	bg.size = vs
-	add_child(bg)
+	chat_bg = Control.new()
+	chat_bg.size = vs
+	chat_bg.draw.connect(_draw_bg)
+	add_child(chat_bg)
+	_bg_load()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	preview = PanelContainer.new()
 	var psb := StyleBoxFlat.new()
@@ -80,6 +144,11 @@ func _ready() -> void:
 	_sbtn(back, Color("#3a2a7a"))
 	back.pressed.connect(func(): queue_free())
 	top.add_child(back)
+	var bgb := Button.new()
+	bgb.text = "پس‌زمینه"
+	_sbtn(bgb, Color("#3a2a7a"))
+	bgb.pressed.connect(_bg_cycle)
+	top.add_child(bgb)
 	var title := Label.new()
 	title.text = "چت خصوصی"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -62,7 +62,7 @@ func _setup_audio() -> void:
 		cap = AudioEffectCapture.new()
 		AudioServer.add_bus_effect(bi, cap)
 		var am := AudioEffectAmplify.new()
-		am.volume_db = -80.0
+		am.volume_db = 0.0
 		AudioServer.add_bus_effect(bi, am)
 	else:
 		cap = AudioServer.get_bus_effect(bi, 0)
@@ -169,6 +169,7 @@ func stop() -> void:
 	if mic:
 		mic.stop()
 		mic.stream = null
+		remove_child(mic)
 		mic.queue_free()
 		mic = null
 	var bi := AudioServer.get_bus_index("CallMic")
