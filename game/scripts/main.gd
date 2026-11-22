@@ -1971,14 +1971,19 @@ func _open_chat() -> void:
 
 
 func _pick_photo() -> void:
-	if OS.get_name() == "Android":
-		OS.request_permissions()
+	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
+		var pk = Engine.get_singleton("CheenoPicker")
+		if not pk.is_connected("photo_picked", _on_native_photo):
+			pk.connect("photo_picked", _on_native_photo)
+			pk.connect("photo_failed", _on_native_fail)
+		pk.pick()
+		return
 	var fd := FileDialog.new()
 	fd.access = FileDialog.ACCESS_FILESYSTEM
 	fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	fd.filters = PackedStringArray(["*.jpg, *.jpeg, *.png ; Images"])
+	fd.filters = PackedStringArray(["*.jpg,*.jpeg,*.png ; Images"])
 	fd.use_native_dialog = false
-	fd.current_dir = "/storage/emulated/0/DCIM" if OS.get_name() == "Android" else OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
+	fd.current_dir = "/storage/emulated/0/DCIM/Camera" if OS.get_name() == "Android" else OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
 	fd.size = Vector2i(680, 900)
 	fd.file_selected.connect(_photo_chosen)
 	fd.canceled.connect(fd.queue_free)
@@ -1986,8 +1991,32 @@ func _pick_photo() -> void:
 	fd.popup_centered()
 
 
+func _on_native_fail(reason: String) -> void:
+	if reason != "cancel":
+		print("photo pick failed: ", reason)
+
+
+func _on_native_photo(b64: String) -> void:
+	var raw := Marshalls.base64_to_raw(b64)
+	var img := Image.new()
+	var err := img.load_jpg_from_buffer(raw)
+	if err != OK:
+		err = img.load_png_from_buffer(raw)
+	if err != OK:
+		err = img.load_webp_from_buffer(raw)
+	if err != OK:
+		return
+	await _photo_from_image(img)
+
+
 func _photo_chosen(path: String) -> void:
 	var img := Image.load_from_file(path)
+	if img == null or img.is_empty():
+		return
+	await _photo_from_image(img)
+
+
+func _photo_from_image(img: Image) -> void:
 	if img == null or img.is_empty():
 		return
 	var m := maxi(img.get_width(), img.get_height())
