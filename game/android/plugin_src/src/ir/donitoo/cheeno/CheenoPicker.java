@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Base64;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
@@ -37,6 +40,59 @@ public class CheenoPicker extends GodotPlugin {
         s.add(new SignalInfo("photo_picked", String.class));
         s.add(new SignalInfo("photo_failed", String.class));
         return s;
+    }
+
+    private AudioRecord rec;
+    private final Object recLock = new Object();
+
+    @UsedByGodot
+    public boolean recStart() {
+        synchronized (recLock) {
+            if (rec != null) return true;
+            try {
+                int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+                if (min <= 0) return false;
+                AudioRecord r = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, 16000,
+                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, min * 4);
+                if (r.getState() != AudioRecord.STATE_INITIALIZED) {
+                    r.release();
+                    return false;
+                }
+                r.startRecording();
+                rec = r;
+                return true;
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+    }
+
+    @UsedByGodot
+    public byte[] recRead() {
+        synchronized (recLock) {
+            if (rec == null) return new byte[0];
+            byte[] b = new byte[6400];
+            int n = rec.read(b, 0, b.length, AudioRecord.READ_NON_BLOCKING);
+            if (n <= 0) return new byte[0];
+            byte[] o = new byte[n];
+            System.arraycopy(b, 0, o, 0, n);
+            return o;
+        }
+    }
+
+    @UsedByGodot
+    public void recStop() {
+        synchronized (recLock) {
+            if (rec == null) return;
+            try { rec.stop(); } catch (Throwable t) {}
+            try { rec.release(); } catch (Throwable t) {}
+            rec = null;
+        }
+    }
+
+    @Override
+    public void onMainDestroy() {
+        recStop();
     }
 
     @UsedByGodot
