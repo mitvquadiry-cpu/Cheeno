@@ -505,6 +505,7 @@ func _send(input: LineEdit, btn: Button) -> void:
 	btn.disabled = false
 	if r.ok:
 		input.text = ""
+		_snd("msg_out")
 		_set_status("موجودی: %d سکه" % int(r.data.get("balance", 0)))
 		var msgs := content.get_node_or_null("Msgs") as VBoxContainer
 		if msgs:
@@ -663,6 +664,7 @@ func _call_start(nm: String) -> void:
 		return
 	call_id = int(r2.data.get("id", 0))
 	_audio_start(true)
+	_ring("back")
 	_call_ui("در حال زنگ زدن به " + nm + "...", false)
 	_call_loop(true)
 
@@ -675,7 +677,9 @@ func _call_ui(t: String, incoming: bool) -> void:
 		_sbtn(ac, Color("#1f8a55"))
 		ac.pressed.connect(func():
 			var r: Dictionary = await Api.soc_call("accept", {"id": call_id})
+			incoming_ringing = false
 			if r.ok:
+				_ring("")
 				_audio_start(false)
 				_call_ui("تماس برقرار است", false)
 				_call_loop(false)
@@ -688,6 +692,8 @@ func _call_ui(t: String, incoming: bool) -> void:
 	_sbtn(en, Color("#a83255"))
 	en.pressed.connect(func():
 		call_active = false
+		incoming_ringing = false
+		_ring("")
 		_audio_stop()
 		await Api.soc_call("end", {"id": call_id})
 		_close_popup()
@@ -702,6 +708,8 @@ func _call_loop(is_caller: bool) -> void:
 		if not call_active or not is_inside_tree():
 			return
 		var r: Dictionary = await Api.soc_call("tick" if is_caller else "poll", {"id": call_id})
+		if r.ok and r.data.get("state", "") in ["active", "ended"]:
+			_ring("")
 		if r.ok and r.data.get("state", "") == "ended":
 			call_active = false
 			_audio_stop()
@@ -712,15 +720,27 @@ func _call_loop(is_caller: bool) -> void:
 func _poll_incoming() -> void:
 	while is_inside_tree():
 		await get_tree().create_timer(4.0).timeout
-		if not is_inside_tree() or call_active or get_node_or_null("Popup"):
+		if not is_inside_tree() or call_active:
+			continue
+		if get_node_or_null("Popup"):
+			if call_id > 0 and incoming_ringing:
+				var pr: Dictionary = await Api.soc_call("poll", {"id": call_id})
+				if pr.ok and pr.data.get("state", "") != "ringing" and incoming_ringing:
+					incoming_ringing = false
+					_ring("")
+					_close_popup()
+					_set_status("تماس از دست رفت.")
 			continue
 		var r: Dictionary = await Api.soc_call("incoming")
 		if r.ok and r.data.get("call", null) != null:
 			call_id = int(r.data.call.id)
+			_ring("ring")
+			incoming_ringing = true
 			_call_ui("تماس از " + str(r.data.call.from), true)
 
 
 var audio: Node
+var incoming_ringing := false
 
 
 func _audio_start(caller: bool) -> void:
@@ -737,3 +757,25 @@ func _audio_stop() -> void:
 	if audio and is_instance_valid(audio):
 		audio.stop()
 	audio = null
+
+
+func _snd(n: String) -> void:
+	var m := get_tree().current_scene
+	if m and m.has_method("_play"):
+		m._play(n)
+
+
+func _ring(kind: String) -> void:
+	var m := get_tree().current_scene
+	if not m:
+		return
+	if kind == "":
+		m.ring_stop()
+	else:
+		m.ring_start(kind)
+
+
+func _exit_tree() -> void:
+	var m := get_tree().current_scene if get_tree() else null
+	if m and m.has_method("ring_stop"):
+		m.ring_stop()

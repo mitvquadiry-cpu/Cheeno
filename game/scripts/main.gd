@@ -531,7 +531,7 @@ func _press_panel(p: Vector2) -> void:
 					Save.avatar = i
 					if Api.token != "":
 						Api.set_profile(i)
-			if Api.token != "" and Rect2(Vector2(110, 660), Vector2(500, 64)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 912), Vector2(500, 64)).has_point(p):
 				_pick_photo()
 			if Api.token != "" and Rect2(Vector2(110, 750), Vector2(500, 64)).has_point(p):
 				panel = "name"
@@ -541,7 +541,7 @@ func _press_panel(p: Vector2) -> void:
 				panel = "redeem"
 				login_text = ""
 				login_msg = ""
-			if Api.token != "" and is_admin and Rect2(Vector2(110, 912), Vector2(500, 60)).has_point(p):
+			if Api.token != "" and is_admin and Rect2(Vector2(110, 1060), Vector2(500, 60)).has_point(p):
 				panel = "codes"
 				_load_codes()
 			if Api.token != "" and Rect2(Vector2(110, 990), Vector2(500, 60)).has_point(p) and not close_rect().has_point(p):
@@ -1128,6 +1128,11 @@ func _find_hint() -> Dictionary:
 								ok = true
 					if ok:
 						fits += 1
+				var rest: Array = []
+				for j in hand.size():
+					if j != i and hand[j] != null:
+						rest.append(hand[j].cells)
+				var can_finish := _can_finish(rest, 0)
 				board = saved_board
 				var others := 0
 				for j in hand.size():
@@ -1135,12 +1140,59 @@ func _find_hint() -> Dictionary:
 						others += 1
 				var sc: float = (rows_full.size() + cols_full.size()) * 100.0 - holes * 30.0 + hand[i].cells.size() * 0.5
 				sc -= edges * 1.5
+				if not can_finish:
+					sc -= 5000.0
 				sc -= (others - fits) * 80.0
 				sc += (rows_full.size() + cols_full.size() - 1) * 40.0 if rows_full.size() + cols_full.size() > 1 else 0.0
 				if sc > best_score:
 					best_score = sc
 					best = {"slot": i, "cell": Vector2i(c, r)}
 	return best
+
+
+func _clear_full(b: Array) -> Array:
+	var out: Array = b.duplicate()
+	for k in n:
+		var rf := true
+		var cf := true
+		for q in n:
+			if b[k * n + q] == 0:
+				rf = false
+			if b[q * n + k] == 0:
+				cf = false
+		if rf:
+			for q in n:
+				out[k * n + q] = 0
+		if cf:
+			for q in n:
+				out[q * n + k] = 0
+	return out
+
+
+# آیا می‌شود همه‌ی قطعه‌های باقی‌مانده را (به هر ترتیب) روی تخته‌ی فعلی گذاشت؟
+func _can_finish(rest: Array, depth: int) -> bool:
+	if rest.is_empty():
+		return true
+	if depth > 3:
+		return true
+	var base: Array = board
+	for k in rest.size():
+		var cells: Array = rest[k]
+		var others: Array = rest.duplicate()
+		others.remove_at(k)
+		for y in n:
+			for x in n:
+				if not _can_place(cells, Vector2i(x, y)):
+					continue
+				var nb: Array = base.duplicate()
+				for v in cells:
+					nb[(y + v.y) * n + x + v.x] = 1
+				board = _clear_full(nb)
+				var ok := _can_finish(others, depth + 1)
+				board = base
+				if ok:
+					return true
+	return false
 
 
 func _use_hint() -> void:
@@ -1244,6 +1296,10 @@ func _make_sounds() -> void:
 		"click": _wave([880.0], 0.04, 0.35),
 		"clear": _wave([523.0, 659.0, 784.0, 1047.0], 0.09, 0.6),
 		"over": _wave([392.0, 330.0, 262.0], 0.22, 0.6),
+		"msg_in": _wave([784.0, 1175.0], 0.1, 0.6),
+		"msg_out": _wave([1047.0], 0.07, 0.4, 0.3),
+		"ring": _wave([880.0, 660.0, 880.0, 660.0], 0.16, 0.7),
+		"back": _wave([425.0], 0.9, 0.45),
 	}
 	for k in defs:
 		var p := AudioStreamPlayer.new()
@@ -1256,6 +1312,21 @@ var unread_count := 0
 var unread_last := -1
 var unread_busy := false
 var ring_seen := -1
+var ring_kind := ""
+
+
+func ring_start(kind: String) -> void:
+	if ring_kind == kind:
+		return
+	ring_kind = kind
+	while ring_kind == kind and is_inside_tree():
+		_play(kind)
+		await get_tree().create_timer(2.0 if kind == "ring" else 3.5).timeout
+
+
+func ring_stop() -> void:
+	ring_kind = ""
+
 
 
 func _poll_unread() -> void:
@@ -1269,7 +1340,7 @@ func _poll_unread() -> void:
 		var cl = ic.data.get("call", null) if ic.ok else null
 		if cl is Dictionary and int(cl.get("id", 0)) != ring_seen:
 			ring_seen = int(cl.get("id", 0))
-			_play("pick")
+			_play("ring")
 			_open_chat()
 	if not r.ok:
 		return
@@ -1284,8 +1355,8 @@ func _poll_unread() -> void:
 			_play("clear")
 		account_balance = nb
 		queue_redraw()
-	if unread_last >= 0 and l > unread_last and c > 0:
-		_play("pick")
+	if unread_last >= 0 and l > unread_last:
+		_play("msg_in")
 	unread_last = l
 	if c != unread_count:
 		unread_count = c
@@ -1333,7 +1404,9 @@ func _badge(r: Rect2, key: String) -> void:
 	var f := ThemeDB.fallback_font
 	var c := Vector2(r.position.x + 6, r.position.y + 6)
 	var n: int = int(Save.free.get(key, 0))
-	draw_circle(c, 20, Color("#ffd166") if n > 0 else Color("#4a3f7a"))
+	if n <= 0:
+		return
+	draw_circle(c, 20, Color("#ffd166"))
 	draw_arc(c, 20, 0, TAU, 32, Color.WHITE, 2.0)
 	draw_string(f, Vector2(c.x - 20, c.y + 9), str(n), HORIZONTAL_ALIGNMENT_CENTER, 40, 26,
 		Color("#140d2b") if n > 0 else Color.WHITE)
@@ -1723,8 +1796,8 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 		"profile":
 			_draw_avatar(Vector2(360, 440), 50)
 			if Api.token != "":
-				draw_rect(Rect2(Vector2(110, 660), Vector2(500, 64)), Color("#1f8a55"), true)
-				draw_string(f, Vector2(110, 703), "عکس پروفایل (۵۰۰ سکه)", HORIZONTAL_ALIGNMENT_CENTER, 500, 26, Color.WHITE)
+				draw_rect(Rect2(Vector2(110, 912), Vector2(500, 64)), Color("#1f8a55"), true)
+				draw_string(f, Vector2(110, 955), "عکس پروفایل (۵۰۰ سکه)", HORIZONTAL_ALIGNMENT_CENTER, 500, 26, Color.WHITE)
 			draw_string(f, Vector2(0, 540 - 70), "", HORIZONTAL_ALIGNMENT_CENTER, 720, 10)
 			for i in AVATARS.size():
 				var c := Vector2(110 + i * 95, 540)
@@ -1738,7 +1811,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 				_btn(Rect2(Vector2(110, 750), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
 				_btn(Rect2(Vector2(110, 834), Vector2(500, 60)), "کد هدیه", Color("#2a1f55"), 24)
 				if is_admin:
-					_btn(Rect2(Vector2(110, 912), Vector2(500, 60)), "مدیریت کدها", Color("#5a2a55"), 22)
+					_btn(Rect2(Vector2(110, 1060), Vector2(500, 60)), "مدیریت کدها", Color("#5a2a55"), 22)
 				_btn(Rect2(Vector2(110, 990), Vector2(500, 60)), "چت خصوصی", Color("#1f5a55"), 24)
 		"redeem":
 			draw_string(f, Vector2(0, 372), "کد هدیه را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
