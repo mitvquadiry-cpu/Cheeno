@@ -84,15 +84,17 @@ public class CheenoPicker extends GodotPlugin {
     }
 
     @UsedByGodot
-    public byte[] recRead() {
+    public String recRead() {
+        try {
         synchronized (recLock) {
-            if (rec == null) return new byte[0];
+            if (rec == null) return "";
             byte[] b = new byte[6400];
             int n = rec.read(b, 0, b.length, AudioRecord.READ_NON_BLOCKING);
-            if (n <= 0) return new byte[0];
-            byte[] o = new byte[n];
-            System.arraycopy(b, 0, o, 0, n);
-            return o;
+            if (n <= 0) return "";
+            return Base64.encodeToString(b, 0, n, Base64.NO_WRAP);
+        }
+        } catch (Throwable t) {
+            return "";
         }
     }
 
