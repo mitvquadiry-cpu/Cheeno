@@ -16,6 +16,9 @@ var sendbuf := PackedFloat32Array()
 var phase := 0.0
 var mic_fixed := false
 var _chk := 0.0
+var sent := 0
+var recv := 0
+var peak := 0.0
 signal failed
 
 
@@ -51,7 +54,7 @@ func _setup_audio() -> void:
 		AudioServer.add_bus()
 		bi = AudioServer.bus_count - 1
 		AudioServer.set_bus_name(bi, "CallMic")
-		AudioServer.set_bus_mute(bi, true)
+		AudioServer.set_bus_volume_db(bi, -80.0)
 		cap = AudioEffectCapture.new()
 		AudioServer.add_bus_effect(bi, cap)
 	else:
@@ -108,6 +111,7 @@ func _process(_dt: float) -> void:
 	var step := float(AudioServer.get_mix_rate()) / RATE
 	var frames := cap.get_buffer(cap.get_frames_available())
 	for f in frames:
+		peak = maxf(peak, absf(f.x))
 		phase += 1.0
 		if phase >= step:
 			phase -= step
@@ -119,9 +123,11 @@ func _process(_dt: float) -> void:
 			pcm.encode_s16(i * 2, int(clampf(sendbuf[i] * 1.5, -1.0, 1.0) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		ch.put_packet(pcm)
+		sent += 1
 	# دریافت
 	while ch.get_available_packet_count() > 0:
 		var pk := ch.get_packet()
+		recv += 1
 		var n := pk.size() / 2
 		if gen.get_frames_available() < n:
 			continue
