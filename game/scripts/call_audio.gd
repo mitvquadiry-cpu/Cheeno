@@ -54,9 +54,11 @@ func _setup_audio() -> void:
 		AudioServer.add_bus()
 		bi = AudioServer.bus_count - 1
 		AudioServer.set_bus_name(bi, "CallMic")
-		AudioServer.set_bus_volume_db(bi, -80.0)
 		cap = AudioEffectCapture.new()
 		AudioServer.add_bus_effect(bi, cap)
+		var am := AudioEffectAmplify.new()
+		am.volume_db = -80.0
+		AudioServer.add_bus_effect(bi, am)
 	else:
 		cap = AudioServer.get_bus_effect(bi, 0)
 	mic = AudioStreamPlayer.new()
