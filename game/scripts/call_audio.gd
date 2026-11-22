@@ -12,6 +12,7 @@ var cap: AudioEffectCapture
 var mic: AudioStreamPlayer
 var out: AudioStreamPlayer
 var gen: AudioStreamGeneratorPlayback
+var mute_send := false
 var sendbuf := PackedFloat32Array()
 var phase := 0.0
 var mic_fixed := false
@@ -146,7 +147,8 @@ func _process(_dt: float) -> void:
 		for i in CHUNK:
 			pcm.encode_s16(i * 2, int(clampf(sendbuf[i] * 1.5, -1.0, 1.0) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
-		ch.put_packet(pcm)
+		if not mute_send:
+			ch.put_packet(pcm)
 		sent += 1
 	# دریافت
 	while ch.get_available_packet_count() > 0:

@@ -713,6 +713,8 @@ func _call_start(nm: String) -> void:
 	call_id = int(r2.data.get("id", 0))
 	call_ready = false
 	_audio_start(true)
+	if audio:
+		audio.mute_send = true
 	_ring("back")
 	_call_ui("در حال زنگ زدن به " + nm + "...", false)
 	_call_loop(true)
@@ -815,6 +817,8 @@ func _call_loop(is_caller: bool) -> void:
 			return
 		if r.ok and r.data.get("state", "") in ["active", "ended"]:
 			_ring("")
+			if audio and is_instance_valid(audio):
+				audio.mute_send = false
 			if r.data.get("state", "") == "active":
 				call_ready = true
 		if r.ok and r.data.get("state", "") == "ended":

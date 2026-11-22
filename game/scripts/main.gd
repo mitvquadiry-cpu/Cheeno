@@ -308,7 +308,7 @@ func panel_rect() -> Rect2:
 
 func close_rect() -> Rect2:
 	if panel == "profile" or panel == "name":
-		return Rect2(Vector2(220, 1080), Vector2(280, 56))
+		return Rect2(Vector2(220, 1106), Vector2(280, 56))
 	return Rect2(Vector2(220, 920), Vector2(280, 56))
 
 
@@ -541,20 +541,20 @@ func _press_panel(p: Vector2) -> void:
 					Save.avatar = i
 					if Api.token != "":
 						Api.set_profile(i)
-			if Api.token != "" and Rect2(Vector2(110, 912), Vector2(500, 64)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 886), Vector2(500, 60)).has_point(p):
 				_pick_photo()
 			if Api.token != "" and Rect2(Vector2(110, 750), Vector2(500, 64)).has_point(p):
 				panel = "name"
 				name_text = ""
 				name_msg = ""
-			if Api.token != "" and Rect2(Vector2(110, 834), Vector2(500, 60)).has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 822), Vector2(500, 56)).has_point(p):
 				panel = "redeem"
 				login_text = ""
 				login_msg = ""
-			if Api.token != "" and is_admin and Rect2(Vector2(110, 1060), Vector2(500, 60)).has_point(p):
+			if Api.token != "" and is_admin and Rect2(Vector2(110, 1022), Vector2(500, 56)).has_point(p):
 				panel = "codes"
 				_load_codes()
-			if Api.token != "" and Rect2(Vector2(110, 990), Vector2(500, 60)).has_point(p) and not close_rect().has_point(p):
+			if Api.token != "" and Rect2(Vector2(110, 954), Vector2(500, 56)).has_point(p) and not close_rect().has_point(p):
 				_open_chat()
 			if Rect2(Vector2(110, 650), Vector2(500, 70)).has_point(p):
 				if Api.token == "":
@@ -1913,8 +1913,7 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 		"profile":
 			_draw_avatar(Vector2(360, 440), 50)
 			if Api.token != "":
-				draw_rect(Rect2(Vector2(110, 912), Vector2(500, 64)), Color("#1f8a55"), true)
-				draw_string(f, Vector2(110, 955), "عکس پروفایل (۵۰۰ سکه)", HORIZONTAL_ALIGNMENT_CENTER, 500, 26, Color.WHITE)
+				_btn(Rect2(Vector2(110, 886), Vector2(500, 60)), "عکس پروفایل (۵۰۰ سکه)", Color("#1f8a55"), 24)
 			draw_string(f, Vector2(0, 540 - 70), "", HORIZONTAL_ALIGNMENT_CENTER, 720, 10)
 			for i in AVATARS.size():
 				var c := Vector2(110 + i * 95, 540)
@@ -1926,10 +1925,10 @@ func _draw_panel(vp: Vector2, f: Font) -> void:
 			_btn(Rect2(Vector2(110, 650), Vector2(500, 70)), "ورود / ثبت‌نام" if Api.token == "" else "خروج از حساب", Color("#3a2a7a"), 26)
 			if Api.token != "":
 				_btn(Rect2(Vector2(110, 750), Vector2(500, 64)), "تغییر نام", Color("#2a1f55"), 26)
-				_btn(Rect2(Vector2(110, 834), Vector2(500, 60)), "کد هدیه", Color("#2a1f55"), 24)
+				_btn(Rect2(Vector2(110, 822), Vector2(500, 56)), "کد هدیه", Color("#2a1f55"), 24)
 				if is_admin:
-					_btn(Rect2(Vector2(110, 1060), Vector2(500, 60)), "مدیریت کدها", Color("#5a2a55"), 22)
-				_btn(Rect2(Vector2(110, 990), Vector2(500, 60)), "چت خصوصی", Color("#1f5a55"), 24)
+					_btn(Rect2(Vector2(110, 1022), Vector2(500, 56)), "مدیریت کدها", Color("#5a2a55"), 22)
+				_btn(Rect2(Vector2(110, 954), Vector2(500, 56)), "چت خصوصی", Color("#1f5a55"), 24)
 		"redeem":
 			draw_string(f, Vector2(0, 372), "کد هدیه را وارد کن", HORIZONTAL_ALIGNMENT_CENTER, 720, 24, Color("#d9d0ff"))
 			var rr := Rect2(110, 404, 500, 72)
