@@ -68,6 +68,7 @@ var history: Array = []
 var hint := {}
 var hint_fails := 0
 var photo_zoom := false
+var zoom_tex: Texture2D
 var msg := ""
 var pressed_pos := Vector2(-1, -1)
 var time := 0.0
@@ -374,6 +375,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 	if photo_zoom:
 		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
 			photo_zoom = false
+			zoom_tex = null
+			queue_redraw()
 		return
 	var event := ev.duplicate()
 	if event is InputEventMouse:
@@ -532,6 +535,15 @@ func _press_panel(p: Vector2) -> void:
 			for i in PACKS.size():
 				if pack_rect(i).has_point(p):
 					_buy_pack(PACKS[i].id)
+		"records":
+			for i in mini(records.size(), 8):
+				var cr := Rect2(Vector2(70, 380 + i * 92), Vector2(580, 80))
+				var rt: Texture2D = rec_tex.get(str(records[i].get("photo", "")))
+				if rt and (p - (cr.position + Vector2(44, 40))).length() < 34:
+					zoom_tex = rt
+					photo_zoom = true
+					queue_redraw()
+					return
 		"profile":
 			if photo_tex and Api.token != "" and (p - Vector2(360, 440)).length() < 56:
 				photo_zoom = true
@@ -1792,7 +1804,7 @@ func _draw() -> void:
 			var cp: Vector2i = hint.cell + v
 			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
 
-	if photo_zoom and photo_tex:
+	if photo_zoom and (zoom_tex or photo_tex):
 		var vz := get_viewport_rect().size
 		draw_rect(Rect2(Vector2.ZERO, vz), Color(0, 0, 0, 0.85), true)
 		var zr := minf(vz.x * 0.42, 300.0)
@@ -1803,7 +1815,7 @@ func _draw() -> void:
 			var a := TAU * k / 64.0
 			zp.append(zc + Vector2(cos(a), sin(a)) * zr)
 			zu.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
-		draw_colored_polygon(zp, Color.WHITE, zu, photo_tex)
+		draw_colored_polygon(zp, Color.WHITE, zu, zoom_tex if zoom_tex else photo_tex)
 
 	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
 	_btn(shuffle_rect(), "تعویض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)

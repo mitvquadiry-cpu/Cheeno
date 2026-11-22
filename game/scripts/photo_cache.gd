@@ -99,7 +99,7 @@ func _draw() -> void:
 static var viewer_open := false
 
 func _tap(e: InputEvent) -> void:
-	var hit: bool = (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and not e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	var hit: bool = (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
 	if not hit or pic == null or viewer_open:
 		return
 	accept_event()
