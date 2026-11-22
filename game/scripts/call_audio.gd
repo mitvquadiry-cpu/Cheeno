@@ -18,6 +18,8 @@ var mic_fixed := false
 var _chk := 0.0
 var _dead := 0.0
 var retries := 0
+var nat = null
+var nat_on := false
 var sent := 0
 var recv := 0
 var peak := 0.0
@@ -51,6 +53,10 @@ func start(id: int, caller: bool) -> bool:
 
 
 func _setup_audio() -> void:
+	if Engine.has_singleton("CheenoPicker"):
+		nat = Engine.get_singleton("CheenoPicker")
+		_setup_out()
+		return
 	var bi := AudioServer.get_bus_index("CallMic")
 	if bi < 0:
 		AudioServer.add_bus()
@@ -68,6 +74,10 @@ func _setup_audio() -> void:
 	mic.bus = "CallMic"
 	add_child(mic)
 	mic.play()
+	_setup_out()
+
+
+func _setup_out() -> void:
 	out = AudioStreamPlayer.new()
 	var g := AudioStreamGenerator.new()
 	g.mix_rate = RATE
@@ -100,7 +110,13 @@ func _process(_dt: float) -> void:
 	if not running or pc == null:
 		return
 	pc.poll()
-	if not mic_fixed:
+	if nat != null and not nat_on:
+		_chk += _dt
+		if _chk > 1.0:
+			_chk = 0.0
+			if OS.get_name() != "Android" or "android.permission.RECORD_AUDIO" in OS.get_granted_permissions():
+				nat_on = bool(nat.recStart())
+	if not mic_fixed and nat == null:
 		_chk += _dt
 		if _chk > 1.0:
 			_chk = 0.0
@@ -108,7 +124,7 @@ func _process(_dt: float) -> void:
 				mic_fixed = true
 				mic.stop()
 				mic.play()
-	if mic_fixed and peak < 0.0005:
+	if nat == null and mic_fixed and peak < 0.0005:
 		_dead += _dt
 		if _dead > 2.0 and retries < 6:
 			_dead = 0.0
@@ -121,8 +137,16 @@ func _process(_dt: float) -> void:
 		return
 	connected = true
 	# ارسال
+	if nat != null and nat_on:
+		var raw: PackedByteArray = nat.recRead()
+		for i in raw.size() / 2:
+			var fv := float(raw.decode_s16(i * 2)) / 32768.0
+			peak = maxf(peak, absf(fv))
+			sendbuf.append(fv)
 	var step := float(AudioServer.get_mix_rate()) / RATE
-	var frames := cap.get_buffer(cap.get_frames_available())
+	var frames := PackedVector2Array()
+	if nat == null:
+		frames = cap.get_buffer(cap.get_frames_available())
 	for f in frames:
 		peak = maxf(peak, absf(f.x))
 		phase += 1.0
@@ -151,6 +175,8 @@ func _process(_dt: float) -> void:
 
 func stop() -> void:
 	running = false
+	if nat != null:
+		nat.recStop()
 	if mic:
 		mic.stop()
 		mic.stream = null
