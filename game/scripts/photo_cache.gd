@@ -97,7 +97,7 @@ func _draw() -> void:
 
 
 func _tap(e: InputEvent) -> void:
-	var hit := (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	var hit: bool = (e is InputEventScreenTouch and not e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
 	if not hit or pic == null:
 		return
 	accept_event()
