@@ -141,7 +141,7 @@ public class CheenoPicker extends GodotPlugin {
             AudioTrack t = trk;
             if (t == null) return;
             byte[] b = Base64.decode(b64, Base64.NO_WRAP);
-            t.write(b, 0, b.length);
+            t.write(b, 0, b.length, AudioTrack.WRITE_NON_BLOCKING);
         } catch (Throwable e) {}
     }
 
