@@ -20,6 +20,7 @@ var _chk := 0.0
 var _dead := 0.0
 var retries := 0
 var nat = null
+var agc_g := 6.0
 var nat_play := false
 var nat_try := 0
 var nat_on := false
@@ -151,8 +152,14 @@ func _process(_dt: float) -> void:
 	while sendbuf.size() >= CHUNK:
 		var pcm := PackedByteArray()
 		pcm.resize(CHUNK * 2)
+		var cpk := 0.0
 		for i in CHUNK:
-			pcm.encode_s16(i * 2, int(tanh(sendbuf[i] * 3.0) * 32767.0))
+			cpk = maxf(cpk, absf(sendbuf[i]))
+		if cpk > 0.004:
+			var want := clampf(0.35 / cpk, 3.0, 25.0)
+			agc_g = lerpf(agc_g, want, 0.3 if want < agc_g else 0.1)
+		for i in CHUNK:
+			pcm.encode_s16(i * 2, int(tanh(sendbuf[i] * agc_g) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		if not mute_send:
 			ch.put_packet(pcm)
