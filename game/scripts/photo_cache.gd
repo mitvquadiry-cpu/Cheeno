@@ -98,16 +98,23 @@ func _draw() -> void:
 
 static var viewer_open := false
 static var opened_at := 0
+static var closed_at := -1000
+static var cur_layer: CanvasLayer = null
 
 func _tap(e: InputEvent) -> void:
 	var hit: bool = (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	if viewer_open and not is_instance_valid(cur_layer):
+		viewer_open = false
 	if not hit or pic == null or viewer_open:
+		return
+	if Time.get_ticks_msec() - closed_at < 500:
 		return
 	accept_event()
 	viewer_open = true
 	opened_at = Time.get_ticks_msec()
 	var layer := CanvasLayer.new()
 	layer.layer = 100
+	cur_layer = layer
 	var bg := ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.9)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -124,5 +131,6 @@ func _tap(e: InputEvent) -> void:
 			return
 		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
 			viewer_open = false
+			closed_at = Time.get_ticks_msec()
 			layer.queue_free())
 	get_tree().root.add_child(layer)
