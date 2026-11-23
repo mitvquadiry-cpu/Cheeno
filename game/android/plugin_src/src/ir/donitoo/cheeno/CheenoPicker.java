@@ -11,6 +11,8 @@ import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.media.AudioAttributes;
 import android.content.Context;
+import android.os.PowerManager;
+import android.media.audiofx.AcousticEchoCanceler;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
@@ -74,6 +76,34 @@ public class CheenoPicker extends GodotPlugin {
         } catch (Throwable t) {}
     }
 
+    private PowerManager.WakeLock prox;
+    private AcousticEchoCanceler aec;
+
+    private void extras(boolean on, AudioRecord r) {
+        try {
+            if (on) {
+                try {
+                    if (aec == null && r != null && AcousticEchoCanceler.isAvailable()) {
+                        aec = AcousticEchoCanceler.create(r.getAudioSessionId());
+                        if (aec != null) aec.setEnabled(true);
+                    }
+                } catch (Throwable t) {}
+                Activity a = getActivity();
+                if (a == null || prox != null) return;
+                PowerManager pm = (PowerManager) a.getSystemService(Context.POWER_SERVICE);
+                if (pm != null && pm.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+                    PowerManager.WakeLock w = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "cheeno:prox");
+                    w.setReferenceCounted(false);
+                    w.acquire();
+                    prox = w;
+                }
+            } else {
+                if (aec != null) { try { aec.release(); } catch (Throwable t) {} aec = null; }
+                if (prox != null) { try { if (prox.isHeld()) prox.release(); } catch (Throwable t) {} prox = null; }
+            }
+        } catch (Throwable t) {}
+    }
+
     @UsedByGodot
     public boolean recStart() {
         synchronized (recLock) {
@@ -98,6 +128,7 @@ public class CheenoPicker extends GodotPlugin {
                     }
                     rec = r;
                     route(true);
+                    extras(true, r);
                     recInfo = "ok" + src;
                     return true;
                 } catch (Throwable t) {
@@ -178,6 +209,7 @@ public class CheenoPicker extends GodotPlugin {
             try { rec.release(); } catch (Throwable t) {}
             rec = null;
             route(false);
+            extras(false, null);
         }
     }
 
