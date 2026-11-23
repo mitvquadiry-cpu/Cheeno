@@ -8,6 +8,8 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.media.AudioManager;
+import android.media.AudioTrack;
+import android.media.AudioAttributes;
 import android.content.Context;
 
 import org.godotengine.godot.Godot;
@@ -106,6 +108,53 @@ public class CheenoPicker extends GodotPlugin {
         }
     }
 
+    private AudioTrack trk;
+
+    @UsedByGodot
+    public boolean playStart() {
+        synchronized (recLock) {
+            if (trk != null) return true;
+            try {
+                int min = AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+                if (min <= 0) return false;
+                AudioTrack t = new AudioTrack(
+                    new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build(),
+                    new AudioFormat.Builder().setSampleRate(16000)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build(),
+                    min * 4, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
+                if (t.getState() != AudioTrack.STATE_INITIALIZED) { t.release(); return false; }
+                t.play();
+                trk = t;
+                return true;
+            } catch (Throwable e) {
+                return false;
+            }
+        }
+    }
+
+    @UsedByGodot
+    public void playWrite(String b64) {
+        try {
+            AudioTrack t = trk;
+            if (t == null) return;
+            byte[] b = Base64.decode(b64, Base64.NO_WRAP);
+            t.write(b, 0, b.length);
+        } catch (Throwable e) {}
+    }
+
+    @UsedByGodot
+    public void playStop() {
+        synchronized (recLock) {
+            if (trk == null) return;
+            try { trk.stop(); } catch (Throwable e) {}
+            try { trk.release(); } catch (Throwable e) {}
+            trk = null;
+        }
+    }
+
     @UsedByGodot
     public String recRead() {
         try {
@@ -134,6 +183,7 @@ public class CheenoPicker extends GodotPlugin {
 
     @Override
     public void onMainDestroy() {
+        playStop();
         recStop();
     }
 
