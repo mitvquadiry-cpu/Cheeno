@@ -20,6 +20,8 @@ var _chk := 0.0
 var _dead := 0.0
 var retries := 0
 var nat = null
+var nat_play := false
+var nat_try := 0
 var nat_on := false
 var sent := 0
 var recv := 0
@@ -160,6 +162,12 @@ func _process(_dt: float) -> void:
 		var pk := ch.get_packet()
 		recv += 1
 		var n := pk.size() / 2
+		if nat != null and nat_on and not nat_play and nat_try < 5:
+			nat_try += 1
+			nat_play = bool(nat.playStart())
+		if nat_play:
+			nat.playWrite(Marshalls.raw_to_base64(pk))
+			continue
 		if gen.get_frames_available() < n:
 			continue
 		for i in n:
@@ -169,12 +177,14 @@ func _process(_dt: float) -> void:
 
 func _exit_tree() -> void:
 	if nat != null:
+		nat.playStop()
 		nat.recStop()
 
 
 func stop() -> void:
 	running = false
 	if nat != null:
+		nat.playStop()
 		nat.recStop()
 	if mic:
 		mic.stop()
