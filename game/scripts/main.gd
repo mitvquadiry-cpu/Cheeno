@@ -79,8 +79,13 @@ var account_name := ""
 var account_best := 0
 var account_balance := -1:
 	set(value):
-		if value >= 0 and account_balance >= 0 and value < account_balance:
-			msg = "%d سکه از حساب تو کم شد" % (account_balance - value)
+		if value >= 0 and account_balance >= 0 and value != account_balance:
+			if value > account_balance:
+				msg = "%d سکه به حساب تو اضافه شد" % (value - account_balance)
+				_play("clear")
+			else:
+				msg = "%d سکه از حساب تو کم شد" % (account_balance - value)
+			queue_redraw()
 		account_balance = value
 var top_off := 0.0
 var snd := {}
@@ -1457,11 +1462,7 @@ func _poll_unread() -> void:
 	var poll_balance := account_balance
 	var r: Dictionary = await Api.chat_unread()
 	if r.ok and Api.token == poll_token and account_balance == poll_balance and not busy and r.data.has("balance"):
-		var nb := int(r.data.balance)
-		if account_balance >= 0 and nb > account_balance:
-			msg = "%d سکه به حساب تو اضافه شد" % (nb - account_balance)
-			_play("clear")
-		account_balance = nb
+		account_balance = int(r.data.balance)
 		queue_redraw()
 	unread_busy = false
 	if get_node_or_null("ChatLayer") == null:
