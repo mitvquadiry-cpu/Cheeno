@@ -1804,18 +1804,6 @@ func _draw() -> void:
 			var cp: Vector2i = hint.cell + v
 			draw_rect(Rect2(cell_pos(cp.x, cp.y), Vector2(cell, cell)), hc2, false, 4.0)
 
-	if photo_zoom and (zoom_tex or photo_tex):
-		var vz := get_viewport_rect().size
-		draw_rect(Rect2(Vector2.ZERO, vz), Color(0, 0, 0, 0.85), true)
-		var zr := minf(vz.x * 0.42, 300.0)
-		var zc := vz / 2.0
-		var zp := PackedVector2Array()
-		var zu := PackedVector2Array()
-		for k in 64:
-			var a := TAU * k / 64.0
-			zp.append(zc + Vector2(cos(a), sin(a)) * zr)
-			zu.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
-		draw_colored_polygon(zp, Color.WHITE, zu, zoom_tex if zoom_tex else photo_tex)
 
 	_btn(hint_rect(), "راهنما: %d سکه" % HINT_COST, Color("#140d2b"), 26)
 	_btn(shuffle_rect(), "تعویض کارت‌ها: %d سکه" % SHUFFLE_COST, Color("#140d2b"), 24)
@@ -1841,6 +1829,19 @@ func _draw() -> void:
 
 	if panel != "":
 		_draw_panel(vp, f)
+
+	if photo_zoom and (zoom_tex or photo_tex):
+		var vz := get_viewport_rect().size
+		draw_rect(Rect2(Vector2.ZERO, vz), Color(0, 0, 0, 0.85), true)
+		var zr := minf(vz.x * 0.42, 300.0)
+		var zc := vz / 2.0
+		var zp := PackedVector2Array()
+		var zu := PackedVector2Array()
+		for k in 64:
+			var a := TAU * k / 64.0
+			zp.append(zc + Vector2(cos(a), sin(a)) * zr)
+			zu.append(Vector2(0.5 + cos(a) * 0.5, 0.5 + sin(a) * 0.5))
+		draw_colored_polygon(zp, Color.WHITE, zu, zoom_tex if zoom_tex else photo_tex)
 
 
 func _draw_panel(vp: Vector2, f: Font) -> void:
