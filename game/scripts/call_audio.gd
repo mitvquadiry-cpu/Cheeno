@@ -152,7 +152,7 @@ func _process(_dt: float) -> void:
 		var pcm := PackedByteArray()
 		pcm.resize(CHUNK * 2)
 		for i in CHUNK:
-			pcm.encode_s16(i * 2, int(clampf(sendbuf[i] * 1.5, -1.0, 1.0) * 32767.0))
+			pcm.encode_s16(i * 2, int(tanh(sendbuf[i] * 3.0) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		if not mute_send:
 			ch.put_packet(pcm)
