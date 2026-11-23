@@ -77,7 +77,11 @@ var reset_armed := 0.0
 var busy := false
 var account_name := ""
 var account_best := 0
-var account_balance := -1
+var account_balance := -1:
+	set(value):
+		if value >= 0 and account_balance >= 0 and value < account_balance:
+			msg = "%d سکه از حساب تو کم شد" % (account_balance - value)
+		account_balance = value
 var top_off := 0.0
 var snd := {}
 var rot_mode := false
@@ -574,7 +578,7 @@ func _press_panel(p: Vector2) -> void:
 				else:
 					Api.logout()
 					account_name = ""
-					account_balance = 0
+					account_balance = -1
 		"login":
 			_login_pad(p)
 			if Rect2(Vector2(110, 500), Vector2(500, 64)).has_point(p):
@@ -1449,7 +1453,16 @@ func _poll_unread() -> void:
 	if Api.token == "" or unread_busy:
 		return
 	unread_busy = true
+	var poll_token := Api.token
+	var poll_balance := account_balance
 	var r: Dictionary = await Api.chat_unread()
+	if r.ok and Api.token == poll_token and account_balance == poll_balance and not busy and r.data.has("balance"):
+		var nb := int(r.data.balance)
+		if account_balance >= 0 and nb > account_balance:
+			msg = "%d سکه به حساب تو اضافه شد" % (nb - account_balance)
+			_play("clear")
+		account_balance = nb
+		queue_redraw()
 	unread_busy = false
 	if get_node_or_null("ChatLayer") == null:
 		var ic: Dictionary = await Api.soc_call("incoming")
@@ -1464,13 +1477,6 @@ func _poll_unread() -> void:
 	var l := int(r.data.get("last_id", 0))
 	var bn = r.data.get("by_name", {})
 	Api.unread_by_name = bn if bn is Dictionary else {}
-	if r.data.has("balance") and not busy:
-		var nb := int(r.data.get("balance", 0))
-		if account_balance >= 0 and nb > account_balance:
-			msg = "%d سکه به حساب تو اضافه شد" % (nb - account_balance)
-			_play("clear")
-		account_balance = nb
-		queue_redraw()
 	if unread_last >= 0 and l > unread_last:
 		_play("msg_in")
 	unread_last = l
