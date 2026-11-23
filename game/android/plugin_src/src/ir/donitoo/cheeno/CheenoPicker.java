@@ -7,6 +7,8 @@ import android.util.Base64;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.media.AudioManager;
+import android.content.Context;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
@@ -50,6 +52,26 @@ public class CheenoPicker extends GodotPlugin {
     @UsedByGodot
     public String recInfo() { return recInfo; }
 
+    private int oldMode = -1;
+
+    private void route(boolean call) {
+        try {
+            Activity a = getActivity();
+            if (a == null) return;
+            AudioManager am = (AudioManager) a.getSystemService(Context.AUDIO_SERVICE);
+            if (am == null) return;
+            if (call) {
+                if (oldMode == -1) oldMode = am.getMode();
+                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                am.setSpeakerphoneOn(false);
+            } else if (oldMode != -1) {
+                am.setSpeakerphoneOn(false);
+                am.setMode(oldMode);
+                oldMode = -1;
+            }
+        } catch (Throwable t) {}
+    }
+
     @UsedByGodot
     public boolean recStart() {
         synchronized (recLock) {
@@ -73,6 +95,7 @@ public class CheenoPicker extends GodotPlugin {
                         continue;
                     }
                     rec = r;
+                    route(true);
                     recInfo = "ok" + src;
                     return true;
                 } catch (Throwable t) {
@@ -105,6 +128,7 @@ public class CheenoPicker extends GodotPlugin {
             try { rec.stop(); } catch (Throwable t) {}
             try { rec.release(); } catch (Throwable t) {}
             rec = null;
+            route(false);
         }
     }
 
