@@ -108,7 +108,7 @@ public class CheenoPicker extends GodotPlugin {
     public boolean recStart() {
         synchronized (recLock) {
             if (rec != null) return true;
-            int[] srcs = new int[]{MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.MIC, MediaRecorder.AudioSource.DEFAULT};
+            int[] srcs = new int[]{MediaRecorder.AudioSource.MIC, MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.DEFAULT};
             for (int src : srcs) {
                 try {
                     int min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
