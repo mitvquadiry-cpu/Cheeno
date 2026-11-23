@@ -21,6 +21,8 @@ var _dead := 0.0
 var retries := 0
 var nat = null
 var agc_g := 6.0
+var rx_t := 0
+var echo_g := 1.0
 var nat_play := false
 var nat_try := 0
 var nat_on := false
@@ -155,11 +157,16 @@ func _process(_dt: float) -> void:
 		var cpk := 0.0
 		for i in CHUNK:
 			cpk = maxf(cpk, absf(sendbuf[i]))
-		if cpk > 0.004:
+		var rx_on := Time.get_ticks_msec() - rx_t < 350
+		var eg := 1.0
+		if rx_on and cpk < 0.06:
+			eg = 0.15
+		echo_g = lerpf(echo_g, eg, 0.5)
+		if cpk > 0.004 and not rx_on:
 			var want := clampf(0.35 / cpk, 3.0, 25.0)
 			agc_g = lerpf(agc_g, want, 0.3 if want < agc_g else 0.1)
 		for i in CHUNK:
-			pcm.encode_s16(i * 2, int(tanh(sendbuf[i] * agc_g) * 32767.0))
+			pcm.encode_s16(i * 2, int(tanh(sendbuf[i] * agc_g * echo_g) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		if not mute_send:
 			ch.put_packet(pcm)
@@ -169,6 +176,11 @@ func _process(_dt: float) -> void:
 		var pk := ch.get_packet()
 		recv += 1
 		var n := pk.size() / 2
+		var rp := 0
+		for i in n:
+			rp = maxi(rp, absi(pk.decode_s16(i * 2)))
+		if rp > 900:
+			rx_t = Time.get_ticks_msec()
 		if nat != null and nat_on and not nat_play and nat_try < 5:
 			nat_try += 1
 			nat_play = bool(nat.playStart())
