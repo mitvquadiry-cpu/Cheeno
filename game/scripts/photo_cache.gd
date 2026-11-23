@@ -97,6 +97,7 @@ func _draw() -> void:
 
 
 static var viewer_open := false
+static var opened_at := 0
 
 func _tap(e: InputEvent) -> void:
 	var hit: bool = (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
@@ -104,6 +105,7 @@ func _tap(e: InputEvent) -> void:
 		return
 	accept_event()
 	viewer_open = true
+	opened_at = Time.get_ticks_msec()
 	var layer := CanvasLayer.new()
 	layer.layer = 100
 	var bg := ColorRect.new()
@@ -118,6 +120,8 @@ func _tap(e: InputEvent) -> void:
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.add_child(tr)
 	bg.gui_input.connect(func(ev: InputEvent):
+		if Time.get_ticks_msec() - opened_at < 400:
+			return
 		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
 			viewer_open = false
 			layer.queue_free())
