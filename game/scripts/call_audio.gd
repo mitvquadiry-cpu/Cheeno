@@ -29,7 +29,16 @@ var peak := 0.0
 signal failed
 
 
-func start(id: int, caller: bool) -> bool:
+var diag_source := "default"
+var diag_local_relay := 0
+var diag_remote_relay := 0
+var diag_sdp := "-"
+var diag_errors := 0
+
+func diagnostic() -> String:
+	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"]
+
+func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
 	is_caller = caller
 	if OS.get_name() == "Android":
@@ -37,15 +46,21 @@ func start(id: int, caller: bool) -> bool:
 	pc = WebRTCPeerConnection.new()
 	var cfg := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
 		{"urls": ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp"], "username": "openrelayproject", "credential": "openrelayproject"}]}
+	if turn.has("urls") and turn.has("username") and turn.has("credential"):
+		cfg.iceServers[1] = turn
+		diag_source = "WP"
 	if pc.initialize(cfg) != OK:
 		return false
 	ch = pc.create_data_channel("a", {"negotiated": true, "id": 1, "ordered": false, "maxRetransmits": 0})
 	if ch == null:
 		return false
 	pc.session_description_created.connect(func(t: String, sdp: String):
-		pc.set_local_description(t, sdp)
+		if pc.set_local_description(t, sdp) != OK:
+			diag_errors += 1
 		_send({"k": "sd", "t": t, "s": sdp}))
 	pc.ice_candidate_created.connect(func(m: String, i: int, n: String):
+		if " typ relay " in (n + " "):
+			diag_local_relay += 1
 		_send({"k": "ic", "m": m, "i": i, "n": n}))
 	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
 		var pk = Engine.get_singleton("CheenoPicker")
@@ -92,7 +107,9 @@ func _setup_out() -> void:
 
 
 func _send(d: Dictionary) -> void:
-	Api.soc_call("sig_send", {"id": call_id, "data": JSON.stringify(d)})
+	var result: Dictionary = await Api.soc_call("sig_send", {"id": call_id, "data": JSON.stringify(d)})
+	if not result.ok:
+		diag_errors += 1
 
 
 func _sig_loop() -> void:
@@ -103,9 +120,16 @@ func _sig_loop() -> void:
 				var d = JSON.parse_string(str(it))
 				if d is Dictionary:
 					if d.k == "sd":
-						pc.set_remote_description(d.t, d.s)
+						diag_sdp = str(d.t) if d.t in ["offer", "answer"] else "other"
+						if pc.set_remote_description(d.t, d.s) != OK:
+							diag_errors += 1
 					elif d.k == "ic":
-						pc.add_ice_candidate(d.m, int(d.i), d.n)
+						if " typ relay " in (str(d.n) + " "):
+							diag_remote_relay += 1
+						if pc.add_ice_candidate(d.m, int(d.i), d.n) != OK:
+							diag_errors += 1
+		else:
+			diag_errors += 1
 		await get_tree().create_timer(0.7 if not connected else 3.0).timeout
 
 

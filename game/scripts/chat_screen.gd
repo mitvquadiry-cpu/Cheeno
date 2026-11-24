@@ -789,7 +789,7 @@ func _call_start(nm: String) -> void:
 		return
 	call_id = int(r2.data.get("id", 0))
 	call_ready = false
-	_audio_start(true)
+	_audio_start(true, r2.data.get("turn", {}))
 	if audio:
 		audio.mute_send = true
 	_ring("back")
@@ -824,7 +824,7 @@ func _call_ui(t: String, incoming: bool) -> void:
 			if r.ok:
 				_ring("")
 				call_t0 = Time.get_ticks_msec()
-				_audio_start(false)
+				_audio_start(false, r.data.get("turn", {}))
 				_call_ui("تماس برقرار است", false)
 				_call_loop(false)
 			else:
@@ -874,6 +874,7 @@ func _call_tick_ui() -> void:
 	else:
 		st = "صدا: غیرفعال"
 	if audio and is_instance_valid(audio):
+		st += "\n" + audio.diagnostic()
 		st += "\nمیک: " + (str(audio.nat.recInfo()) + (" روشن" if audio.nat_on else " خاموش") if audio.nat != null else "بدون پلاگین")
 	cl.text += "\n" + st
 
@@ -933,11 +934,11 @@ var audio: Node
 var incoming_ringing := false
 
 
-func _audio_start(caller: bool) -> void:
+func _audio_start(caller: bool, turn: Dictionary) -> void:
 	_audio_stop()
 	audio = load("res://scripts/call_audio.gd").new()
 	add_child(audio)
-	if not audio.start(call_id, caller):
+	if not audio.start(call_id, caller, turn):
 		_set_status("مکالمه‌ی صوتی روی این دستگاه پشتیبانی نمی‌شود.")
 		audio.queue_free()
 		audio = null
