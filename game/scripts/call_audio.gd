@@ -39,6 +39,15 @@ var diag_last := "-"
 var was_open := false
 var opens := 0
 var losses := 0
+var loss_snapshot := "-"
+var pc_before := -1
+
+func _remember_loss(before: int, after: int, channel: int, pending: int) -> void:
+	if loss_snapshot != "-":
+		return
+	var states := ["new", "connecting", "connected", "disconnected", "failed", "closed"]
+	var channels := ["connecting", "open", "closing", "closed"]
+	loss_snapshot = "%s>%s %s Q:%d" % [states[before] if before >= 0 and before < states.size() else str(before), states[after] if after >= 0 and after < states.size() else str(after), channels[channel] if channel >= 0 and channel < channels.size() else str(channel), pending]
 var rx_peak := 0
 var native_calls := 0
 var gen_ok := 0
@@ -60,7 +69,7 @@ func _record_error(op: String, code: int) -> void:
 		diag_first = diag_last
 
 func diagnostic() -> String:
-	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last] + "\nopen/lost %d/%d | TX ok/fail %d/%d\nRX peak %d | out N/G/drop %d/%d/%d" % [opens, losses, sent, tx_fail, rx_peak, native_calls, gen_ok, dropped]
+	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last] + "\nopen/lost %d/%d | TX ok/fail %d/%d\nRX peak %d | out N/G/drop %d/%d/%d" % [opens, losses, sent, tx_fail, rx_peak, native_calls, gen_ok, dropped] + "\nLoss: " + loss_snapshot
 
 func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
@@ -180,7 +189,12 @@ func _process(_dt: float) -> void:
 				mic_fixed = true
 				mic.stop()
 				mic.play()
-	_track_channel(ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN)
+	var channel_state := ch.get_ready_state()
+	var pc_now := pc.get_connection_state()
+	if was_open and channel_state != WebRTCDataChannel.STATE_OPEN and loss_snapshot == "-":
+		_remember_loss(pc_before, pc_now, channel_state, ch.get_available_packet_count())
+	pc_before = pc_now
+	_track_channel(channel_state == WebRTCDataChannel.STATE_OPEN)
 	if not was_open:
 		return
 	connected = true
