@@ -29,7 +29,7 @@ var peak := 0.0
 signal failed
 
 
-func start(id: int, caller: bool) -> bool:
+func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
 	is_caller = caller
 	if OS.get_name() == "Android":
@@ -37,6 +37,8 @@ func start(id: int, caller: bool) -> bool:
 	pc = WebRTCPeerConnection.new()
 	var cfg := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
 		{"urls": ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp"], "username": "openrelayproject", "credential": "openrelayproject"}]}
+	if turn.has("urls") and turn.has("username") and turn.has("credential"):
+		cfg.iceServers[1] = turn
 	if pc.initialize(cfg) != OK:
 		return false
 	ch = pc.create_data_channel("a", {"negotiated": true, "id": 1, "ordered": false, "maxRetransmits": 0})
