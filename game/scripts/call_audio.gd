@@ -36,6 +36,22 @@ var diag_sdp := "-"
 var diag_errors := 0
 var diag_first := "-"
 var diag_last := "-"
+var was_open := false
+var opens := 0
+var losses := 0
+var rx_peak := 0
+var native_calls := 0
+var gen_ok := 0
+var dropped := 0
+var tx_fail := 0
+
+func _track_channel(is_open: bool) -> void:
+	if is_open != was_open:
+		if is_open:
+			opens += 1
+		else:
+			losses += 1
+		was_open = is_open
 
 func _record_error(op: String, code: int) -> void:
 	diag_errors += 1
@@ -44,7 +60,7 @@ func _record_error(op: String, code: int) -> void:
 		diag_first = diag_last
 
 func diagnostic() -> String:
-	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last]
+	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last] + "\nopen/lost %d/%d | TX ok/fail %d/%d\nRX peak %d | out N/G/drop %d/%d/%d" % [opens, losses, sent, tx_fail, rx_peak, native_calls, gen_ok, dropped]
 
 func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
@@ -164,7 +180,8 @@ func _process(_dt: float) -> void:
 				mic_fixed = true
 				mic.stop()
 				mic.play()
-	if ch.get_ready_state() != WebRTCDataChannel.STATE_OPEN:
+	_track_channel(ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN)
+	if not was_open:
 		return
 	connected = true
 	# ارسال
@@ -192,24 +209,38 @@ func _process(_dt: float) -> void:
 			pcm.encode_s16(i * 2, int(clampf(sendbuf[i] * 1.5, -1.0, 1.0) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		if not mute_send:
-			ch.put_packet(pcm)
-		sent += 1
+			var result := ch.put_packet(pcm)
+			if result == OK:
+				sent += 1
+			else:
+				tx_fail += 1
+				_record_error("sendPCM", result)
 	# دریافت
 	while ch.get_available_packet_count() > 0:
 		var pk := ch.get_packet()
 		recv += 1
 		var n := pk.size() / 2
+		for i in n:
+			rx_peak = maxi(rx_peak, absi(pk.decode_s16(i * 2)))
 		if nat != null and nat_on and not nat_play and nat_try < 5:
 			nat_try += 1
 			nat_play = bool(nat.playStart())
 		if nat_play:
 			nat.playWrite(Marshalls.raw_to_base64(pk))
+			native_calls += 1
 			continue
 		if gen.get_frames_available() < n:
+			dropped += 1
 			continue
+		var all_ok := n > 0
 		for i in n:
 			var v := float(pk.decode_s16(i * 2)) / 32768.0
-			gen.push_frame(Vector2(v, v))
+			if not gen.push_frame(Vector2(v, v)):
+				all_ok = false
+		if all_ok:
+			gen_ok += 1
+		else:
+			dropped += 1
 
 
 func _exit_tree() -> void:
