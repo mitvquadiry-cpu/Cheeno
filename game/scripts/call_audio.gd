@@ -148,6 +148,14 @@ func _send(d: Dictionary) -> void:
 		_record_error("sendICE" if d.k == "ic" else "sendSDP", int(result.get("code", 0)))
 
 
+var remote_sdp_ready := false
+var early_ice: Array[Dictionary] = []
+
+func _add_remote_ice(d: Dictionary) -> void:
+	var err := pc.add_ice_candidate(d.m, int(d.i), d.n)
+	if err != OK:
+		_record_error("addRelay" if " typ relay " in (str(d.n) + " ") else "addICE", err)
+
 func _sig_loop() -> void:
 	while running and is_inside_tree():
 		var r: Dictionary = await Api.soc_call("sig_get", {"id": call_id})
@@ -160,12 +168,20 @@ func _sig_loop() -> void:
 						var err := pc.set_remote_description(d.t, d.s)
 						if err != OK:
 							_record_error("remoteSDP", err)
+						else:
+							remote_sdp_ready = true
+							for candidate in early_ice:
+								_add_remote_ice(candidate)
+							early_ice.clear()
 					elif d.k == "ic":
 						if " typ relay " in (str(d.n) + " "):
 							diag_remote_relay += 1
-						var err := pc.add_ice_candidate(d.m, int(d.i), d.n)
-						if err != OK:
-							_record_error("addRelay" if " typ relay " in (str(d.n) + " ") else "addICE", err)
+						if remote_sdp_ready:
+							_add_remote_ice(d)
+						elif early_ice.size() < 128:
+							early_ice.append(d)
+						else:
+							_record_error("iceQueueFull", ERR_OUT_OF_MEMORY)
 		else:
 			_record_error("sigGet", int(r.get("code", 0)))
 		await get_tree().create_timer(0.7 if not connected else 3.0).timeout
