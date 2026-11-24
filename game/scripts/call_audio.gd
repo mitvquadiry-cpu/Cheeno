@@ -34,9 +34,17 @@ var diag_local_relay := 0
 var diag_remote_relay := 0
 var diag_sdp := "-"
 var diag_errors := 0
+var diag_first := "-"
+var diag_last := "-"
+
+func _record_error(op: String, code: int) -> void:
+	diag_errors += 1
+	diag_last = "%s:%d" % [op, code]
+	if diag_errors == 1:
+		diag_first = diag_last
 
 func diagnostic() -> String:
-	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"]
+	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last]
 
 func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
@@ -55,8 +63,9 @@ func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	if ch == null:
 		return false
 	pc.session_description_created.connect(func(t: String, sdp: String):
-		if pc.set_local_description(t, sdp) != OK:
-			diag_errors += 1
+		var err := pc.set_local_description(t, sdp)
+		if err != OK:
+			_record_error("localSDP", err)
 		_send({"k": "sd", "t": t, "s": sdp}))
 	pc.ice_candidate_created.connect(func(m: String, i: int, n: String):
 		if " typ relay " in (n + " "):
@@ -68,7 +77,9 @@ func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	_setup_audio()
 	running = true
 	if caller:
-		pc.create_offer()
+		var err := pc.create_offer()
+		if err != OK:
+			_record_error("offer", err)
 	_sig_loop()
 	return true
 
@@ -109,7 +120,7 @@ func _setup_out() -> void:
 func _send(d: Dictionary) -> void:
 	var result: Dictionary = await Api.soc_call("sig_send", {"id": call_id, "data": JSON.stringify(d)})
 	if not result.ok:
-		diag_errors += 1
+		_record_error("sendICE" if d.k == "ic" else "sendSDP", int(result.get("code", 0)))
 
 
 func _sig_loop() -> void:
@@ -121,15 +132,17 @@ func _sig_loop() -> void:
 				if d is Dictionary:
 					if d.k == "sd":
 						diag_sdp = str(d.t) if d.t in ["offer", "answer"] else "other"
-						if pc.set_remote_description(d.t, d.s) != OK:
-							diag_errors += 1
+						var err := pc.set_remote_description(d.t, d.s)
+						if err != OK:
+							_record_error("remoteSDP", err)
 					elif d.k == "ic":
 						if " typ relay " in (str(d.n) + " "):
 							diag_remote_relay += 1
-						if pc.add_ice_candidate(d.m, int(d.i), d.n) != OK:
-							diag_errors += 1
+						var err := pc.add_ice_candidate(d.m, int(d.i), d.n)
+						if err != OK:
+							_record_error("addRelay" if " typ relay " in (str(d.n) + " ") else "addICE", err)
 		else:
-			diag_errors += 1
+			_record_error("sigGet", int(r.get("code", 0)))
 		await get_tree().create_timer(0.7 if not connected else 3.0).timeout
 
 
