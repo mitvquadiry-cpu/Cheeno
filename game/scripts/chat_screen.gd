@@ -869,13 +869,12 @@ func _call_tick_ui() -> void:
 	else:
 		cl.text = "هزینه‌ی تماس با تماس‌گیرنده است"
 	var st := "صدا: وصل نشده"
-	if audio and is_instance_valid(audio) and audio.has_method("media_status"):
-		st = audio.media_status()
-	elif audio and is_instance_valid(audio):
+	if audio and is_instance_valid(audio):
 		st = ("صدا: وصل شد  ارسال %d دریافت %d میک %.2f تلاش %d" % [audio.sent, audio.recv, audio.peak, audio.retries]) if audio.connected else ("صدا: در حال اتصال... (%d/%d)" % [audio.pc.get_connection_state(), audio.pc.get_gathering_state()])
 	else:
 		st = "صدا: غیرفعال"
-	if audio and is_instance_valid(audio) and not audio.has_method("media_status"):
+	if audio and is_instance_valid(audio):
+		st += "\n" + audio.diagnostic()
 		st += "\nمیک: " + (str(audio.nat.recInfo()) + (" روشن" if audio.nat_on else " خاموش") if audio.nat != null else "بدون پلاگین")
 	cl.text += "\n" + st
 
@@ -935,13 +934,11 @@ var audio: Node
 var incoming_ringing := false
 
 
-func _audio_start(caller: bool, turn: Dictionary = {}) -> void:
+func _audio_start(caller: bool, turn: Dictionary) -> void:
 	_audio_stop()
-	var android := OS.get_name() == "Android"
-	audio = load("res://scripts/android_media_call.gd" if android else "res://scripts/call_audio.gd").new()
+	audio = load("res://scripts/call_audio.gd").new()
 	add_child(audio)
-	var ok: bool = audio.start(call_id, caller, turn) if android else audio.start(call_id, caller)
-	if not ok:
+	if not audio.start(call_id, caller, turn):
 		_set_status("مکالمه‌ی صوتی روی این دستگاه پشتیبانی نمی‌شود.")
 		audio.queue_free()
 		audio = null
