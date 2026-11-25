@@ -213,8 +213,63 @@ public class CheenoPicker extends GodotPlugin {
         }
     }
 
+    private static final String MEDIA_ORIGIN = "https://cheeno.invalid";
+    private android.webkit.WebView mediaView;
+    private volatile long mediaToken;
+    private final java.util.ArrayDeque<String> mediaEvents = new java.util.ArrayDeque<>();
+
+    private synchronized void mediaEvent(long token, String event) {
+        if (token == mediaToken && mediaEvents.size() < 256 && event.length() < 131072) mediaEvents.add(event);
+    }
+    @UsedByGodot public synchronized String mediaPop() { return mediaEvents.isEmpty() ? "" : mediaEvents.remove(); }
+    // UI thread only. Never share a WebView or its JS interface between calls.
+    private void releaseMedia() {
+        if (mediaView == null) return;
+        android.webkit.WebView w = mediaView; mediaView = null;
+        w.removeJavascriptInterface("CallHost");
+        if (w.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup)w.getParent()).removeView(w);
+        w.destroy(); route(false);
+    }
+    @UsedByGodot public synchronized void mediaStart(final String page) {
+        final Activity a = getActivity(); final long token = ++mediaToken; mediaEvents.clear();
+        if (a == null) { mediaEvent(token,"{\"state\":\"failed\"}"); return; }
+        a.runOnUiThread(() -> {
+            if (token != mediaToken) return;
+            try {
+                releaseMedia(); route(true);
+                android.webkit.WebView w = new android.webkit.WebView(a); mediaView = w;
+                w.getSettings().setJavaScriptEnabled(true); w.getSettings().setAllowFileAccess(false);
+                w.getSettings().setAllowContentAccess(false); w.getSettings().setMediaPlaybackRequiresUserGesture(false);
+                w.setWebViewClient(new android.webkit.WebViewClient() {
+                    @Override public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String url) { return true; }
+                    @Override public android.webkit.WebResourceResponse shouldInterceptRequest(android.webkit.WebView v, android.webkit.WebResourceRequest r) {
+                        return new android.webkit.WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                    }
+                });
+                w.setWebChromeClient(new android.webkit.WebChromeClient() {
+                    @Override public void onPermissionRequest(android.webkit.PermissionRequest r) {
+                        if (token == mediaToken && MEDIA_ORIGIN.equals(r.getOrigin().toString().replaceAll("/$", "")) && java.util.Arrays.asList(r.getResources()).contains(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE) && a.checkCallingOrSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) r.grant(new String[]{android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE}); else r.deny();
+                    }
+                });
+                w.addJavascriptInterface(new Object(){ @android.webkit.JavascriptInterface public void emit(String event){ if(event!=null) mediaEvent(token,event); } },"CallHost");
+                w.setClickable(false); w.setFocusable(false); w.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                a.addContentView(w,new android.view.ViewGroup.LayoutParams(1,1));
+                w.loadDataWithBaseURL(MEDIA_ORIGIN+"/",page,"text/html","UTF-8",null);
+            } catch (Exception e) { releaseMedia(); mediaEvent(token,"{\"state\":\"failed\"}"); }
+        });
+    }
+    @UsedByGodot public void mediaCommand(String json) {
+        final Activity a=getActivity(); final long token=mediaToken; if(a==null)return;
+        final String wire=Base64.encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8),Base64.NO_WRAP);
+        a.runOnUiThread(()->{if(token==mediaToken && mediaView!=null)mediaView.evaluateJavascript("window.cmd('"+wire+"')",null);});
+    }
+    @UsedByGodot public synchronized void mediaEnd() {
+        final long token=++mediaToken; mediaEvents.clear(); Activity a=getActivity();
+        if(a!=null)a.runOnUiThread(()->{if(token==mediaToken)releaseMedia();});
+    }
     @Override
     public void onMainDestroy() {
+        mediaEnd();
         playStop();
         recStop();
     }
