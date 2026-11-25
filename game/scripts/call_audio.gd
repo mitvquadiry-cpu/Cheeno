@@ -71,6 +71,33 @@ func _record_error(op: String, code: int) -> void:
 func diagnostic() -> String:
 	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last] + "\nopen/lost %d/%d | TX ok/fail %d/%d\nRX peak %d | out N/G/drop %d/%d/%d" % [opens, losses, sent, tx_fail, rx_peak, native_calls, gen_ok, dropped] + "\nLoss: " + loss_snapshot
 
+var peer_pcmu := false
+const VOICE_FORMAT := "pcmu8k-v1"
+
+# Each data-channel message carries one independent 40 ms frame.
+func _pack_voice(pcm: PackedByteArray) -> PackedByteArray:
+	var wire := PackedByteArray()
+	wire.resize(CHUNK / 2)
+	for i in wire.size():
+		var x := (pcm.decode_s16(i * 4) + pcm.decode_s16(i * 4 + 2)) >> 1
+		var mag := mini(absi(x), 32635) + 132
+		var seg := 0
+		while mag > (255 << seg):
+			seg += 1
+		wire[i] = ((seg << 4) | ((mag >> (seg + 3)) & 15)) ^ (127 if x < 0 else 255)
+	return wire
+
+func _unpack_voice(wire: PackedByteArray) -> PackedByteArray:
+	var pcm := PackedByteArray()
+	pcm.resize(CHUNK * 2)
+	for i in wire.size():
+		var u := wire[i] ^ 255
+		var mag := (((u & 15) * 8 + 132) << ((u >> 4) & 7)) - 132
+		var x := -mag if u & 128 else mag
+		pcm.encode_s16(i * 4, x)
+		pcm.encode_s16(i * 4 + 2, x)
+	return pcm
+
 var peer_cfg := {}
 var epoch := 0
 var remote_recovery := false
@@ -187,6 +214,8 @@ func _setup_out() -> void:
 func _send(d: Dictionary) -> void:
 	d["g"] = epoch
 	d["recovery"] = true
+	if d.k == "sd":
+		d["voice"] = VOICE_FORMAT
 	var result: Dictionary = await Api.soc_call("sig_send", {"id": call_id, "data": JSON.stringify(d)})
 	if not result.ok:
 		_record_error("sendICE" if d.k == "ic" else "sendSDP", int(result.get("code", 0)))
@@ -225,6 +254,7 @@ func _sig_loop() -> void:
 						if err != OK:
 							_record_error("remoteSDP", err)
 						else:
+							peer_pcmu = d.get("voice", "") == VOICE_FORMAT
 							remote_sdp_ready = true
 							for candidate in early_ice:
 								_add_remote_ice(candidate)
@@ -298,7 +328,11 @@ func _process(_dt: float) -> void:
 			pcm.encode_s16(i * 2, int(clampf(sendbuf[i] * 1.5, -1.0, 1.0) * 32767.0))
 		sendbuf = sendbuf.slice(CHUNK)
 		if not mute_send:
-			var result := ch.put_packet(pcm)
+			var wire := _pack_voice(pcm) if peer_pcmu else pcm
+			# Do not enqueue stale voice behind more than three pending frames.
+			if ch.get_buffered_amount() >= wire.size() * 3:
+				continue
+			var result := ch.put_packet(wire)
 			if result == OK:
 				sent += 1
 			else:
@@ -307,6 +341,10 @@ func _process(_dt: float) -> void:
 	# دریافت
 	while ch.get_available_packet_count() > 0:
 		var pk := ch.get_packet()
+		if pk.size() == CHUNK / 2 and peer_pcmu:
+			pk = _unpack_voice(pk)
+		elif pk.size() != CHUNK * 2:
+			continue
 		recv += 1
 		var n := pk.size() / 2
 		for i in n:
