@@ -71,42 +71,84 @@ func _record_error(op: String, code: int) -> void:
 func diagnostic() -> String:
 	return "TURN: %s | relay L/R: %d/%d\nSDP: %s | errors: %d | channel: %s" % [diag_source, diag_local_relay, diag_remote_relay, diag_sdp, diag_errors, "open" if ch.get_ready_state() == WebRTCDataChannel.STATE_OPEN else "not open"] + "\nfirst: %s | last: %s" % [diag_first, diag_last] + "\nopen/lost %d/%d | TX ok/fail %d/%d\nRX peak %d | out N/G/drop %d/%d/%d" % [opens, losses, sent, tx_fail, rx_peak, native_calls, gen_ok, dropped] + "\nLoss: " + loss_snapshot
 
+var peer_cfg := {}
+var epoch := 0
+var remote_recovery := false
+const MAX_RECOVERY := 2
+
 func start(id: int, caller: bool, turn: Dictionary = {}) -> bool:
 	call_id = id
 	is_caller = caller
 	if OS.get_name() == "Android":
 		OS.request_permissions()
-	pc = WebRTCPeerConnection.new()
 	var cfg := {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
 		{"urls": ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp"], "username": "openrelayproject", "credential": "openrelayproject"}]}
 	if turn.has("urls") and turn.has("username") and turn.has("credential"):
 		cfg.iceServers[1] = turn
 		diag_source = "WP"
-	if pc.initialize(cfg) != OK:
+	peer_cfg = cfg
+	if not _replace_peer(0):
 		return false
-	ch = pc.create_data_channel("a", {"negotiated": true, "id": 1, "ordered": false, "maxRetransmits": 0})
-	if ch == null:
+	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
+		nat = Engine.get_singleton("CheenoPicker")
+	_setup_audio()
+	running = true
+	if caller:
+		_offer()
+	_sig_loop()
+	return true
+
+func _replace_peer(g: int) -> bool:
+	var next := WebRTCPeerConnection.new()
+	if next.initialize(peer_cfg) != OK:
 		return false
+	var data := next.create_data_channel("a", {"negotiated": true, "id": 1, "ordered": false, "maxRetransmits": 0})
+	if data == null:
+		next.close()
+		return false
+	epoch = g
+	retries = g
+	if ch:
+		ch.close()
+	if pc:
+		pc.close()
+	pc = next
+	ch = data
+	connected = false
+	_track_channel(false)
+	remote_sdp_ready = false
+	early_ice.clear()
+	sendbuf.clear()
 	pc.session_description_created.connect(func(t: String, sdp: String):
+		if epoch != g or not running:
+			return
 		var err := pc.set_local_description(t, sdp)
 		if err != OK:
 			_record_error("localSDP", err)
 		_send({"k": "sd", "t": t, "s": sdp}))
 	pc.ice_candidate_created.connect(func(m: String, i: int, n: String):
+		if epoch != g or not running:
+			return
 		if " typ relay " in (n + " "):
 			diag_local_relay += 1
 		_send({"k": "ic", "m": m, "i": i, "n": n}))
-	if OS.get_name() == "Android" and Engine.has_singleton("CheenoPicker"):
-		var pk = Engine.get_singleton("CheenoPicker")
-		nat = pk
-	_setup_audio()
-	running = true
-	if caller:
-		var err := pc.create_offer()
-		if err != OK:
-			_record_error("offer", err)
-	_sig_loop()
 	return true
+
+func _offer() -> void:
+	var err := pc.create_offer()
+	if err != OK:
+		_record_error("offer", err)
+
+func _recover() -> void:
+	if not running or not remote_recovery or epoch >= MAX_RECOVERY:
+		return
+	if is_caller:
+		if _replace_peer(epoch + 1):
+			_offer()
+		else:
+			_record_error("reconnect", FAILED)
+	else:
+		_send({"k":"retry"})
 
 
 func _setup_audio() -> void:
@@ -143,6 +185,8 @@ func _setup_out() -> void:
 
 
 func _send(d: Dictionary) -> void:
+	d["g"] = epoch
+	d["recovery"] = true
 	var result: Dictionary = await Api.soc_call("sig_send", {"id": call_id, "data": JSON.stringify(d)})
 	if not result.ok:
 		_record_error("sendICE" if d.k == "ic" else "sendSDP", int(result.get("code", 0)))
@@ -159,11 +203,23 @@ func _add_remote_ice(d: Dictionary) -> void:
 func _sig_loop() -> void:
 	while running and is_inside_tree():
 		var r: Dictionary = await Api.soc_call("sig_get", {"id": call_id})
+		if not running or not is_inside_tree():
+			return
 		if r.ok:
 			for it in r.data.get("items", []):
 				var d = JSON.parse_string(str(it))
 				if d is Dictionary:
-					if d.k == "sd":
+					var g := int(d.get("g", 0))
+					if g != epoch:
+						if is_caller or g != epoch + 1 or g > MAX_RECOVERY or not remote_recovery or d.get("k") not in ["sd", "ic"]:
+							continue
+						if not _replace_peer(g):
+							continue
+					if d.get("recovery") == true:
+						remote_recovery = true
+					if d.k == "retry" and is_caller:
+						_recover()
+					elif d.k == "sd":
 						diag_sdp = str(d.t) if d.t in ["offer", "answer"] else "other"
 						var err := pc.set_remote_description(d.t, d.s)
 						if err != OK:
@@ -210,10 +266,13 @@ func _process(_dt: float) -> void:
 	if was_open and channel_state != WebRTCDataChannel.STATE_OPEN and loss_snapshot == "-":
 		_remember_loss(pc_before, pc_now, channel_state, ch.get_available_packet_count())
 	pc_before = pc_now
-	_track_channel(channel_state == WebRTCDataChannel.STATE_OPEN)
-	if not was_open:
+	var lost := was_open and channel_state != WebRTCDataChannel.STATE_OPEN
+	connected = channel_state == WebRTCDataChannel.STATE_OPEN
+	_track_channel(connected)
+	if lost:
+		_recover()
+	if not connected:
 		return
-	connected = true
 	# ارسال
 	if nat != null and nat_on:
 		var b64 := str(nat.recRead())
